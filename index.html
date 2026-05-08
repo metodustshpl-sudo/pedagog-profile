@@ -46,6 +46,7 @@
 let allTeachers = [];
 let allTrajectories = [];
 let allCertPrograms = { 2025: [], 2026: [] };
+let teacherPhotosById = new Map();
 let fileModifyTimes = {};
 let fileMonitoringInterval = null;
 let isMonitoring = false;
@@ -60,6 +61,12 @@ const TEACHERS_SHEET_URLS = [
     `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`,
     `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${SHEET_GID}`,
     `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`
+];
+const PHOTOS_GID = '1342815223';
+const PHOTOS_SHEET_URLS = [
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${PHOTOS_GID}`,
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${PHOTOS_GID}`,
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${PHOTOS_GID}`
 ];
 const TRAJECTORY_GID = '1495568701';
 const TRAJECTORY_SHEET_URLS = [
@@ -116,6 +123,23 @@ async function loadData() {
             }
         } else if (!teachersLoaded) {
             throw new Error('Не вдалося завантажити педагогів з Google Sheets');
+        }
+
+        // 1.1 Фото педагогів (мапа ID -> URL)
+        try {
+            teacherPhotosById = await loadTeacherPhotosFromGoogle();
+            // пришиваємо фото до вже завантажених teachers
+            allTeachers = allTeachers.map(t => ({
+                ...t,
+                photoUrl: teacherPhotosById.get(t.id) || ''
+            }));
+            console.log(`🖼️ Фото: знайдено ${teacherPhotosById.size} записів`);
+            console.log('🖼️ Фото (приклад):', teacherPhotosById.get(1) || teacherPhotosById.get(2) || teacherPhotosById.get(3) || '(порожньо)');
+        } catch (e) {
+            teacherPhotosById = new Map();
+            // лишаємо без фото
+            allTeachers = allTeachers.map(t => ({ ...t, photoUrl: '' }));
+            console.warn('⚠️  Не вдалося завантажити фото педагогів:', e.message);
         }
         
         // 2. Завантажуємо освітні траєкторії з Google Sheets
@@ -239,17 +263,40 @@ async function loadGvizPayloadViaScript(url, timeoutMs = 7000) {
 }
 
 async function fetchTextOrGvizScript(url, options = {}) {
+    const urlStr = String(url);
+    const isFile = window.location.protocol === 'file:';
+    const isGvizJson = urlStr.includes('/gviz/') && urlStr.includes('tqx=out:json');
+
+    // У режимі file:// fetch майже гарантовано впаде по CORS.
+    // Тому одразу йдемо через <script> на GViz JSON, навіть якщо дали csv/export URL.
+    if (isFile) {
+        const gvizUrl = isGvizJson ? urlStr : toGvizJsonUrl(urlStr);
+        return await loadGvizPayloadViaScript(gvizUrl, options.timeoutMs || 7000);
+    }
+
     try {
-        return await fetchTextWithRetry(url, options);
+        return await fetchTextWithRetry(urlStr, options);
     } catch (e) {
-        // Якщо це GViz JSON і ми в file:// або схоже на CORS — пробуємо через <script>
-        const isGvizJson = String(url).includes('/gviz/') && String(url).includes('tqx=out:json');
-        const isFile = window.location.protocol === 'file:';
-        if (isGvizJson && (isFile || isLikelyCorsError(e))) {
-            return await loadGvizPayloadViaScript(url, options.timeoutMs || 7000);
+        // Якщо це GViz JSON і схоже на CORS — пробуємо через <script>
+        if (isGvizJson && isLikelyCorsError(e)) {
+            return await loadGvizPayloadViaScript(urlStr, options.timeoutMs || 7000);
         }
         throw e;
     }
+}
+
+function toGvizJsonUrl(anyUrl) {
+    // Підтримує:
+    // - .../export?format=csv&gid=...
+    // - .../gviz/tq?...&gid=...
+    // - .../edit?gid=...#gid=...
+    const str = String(anyUrl || '');
+    const idMatch = str.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    const gidMatch = str.match(/[?&#]gid=(\d+)/);
+    const sheetId = idMatch ? idMatch[1] : '';
+    const gid = gidMatch ? gidMatch[1] : '';
+    if (!sheetId || !gid) return str;
+    return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&gid=${gid}`;
 }
 
 async function loadTeachersFromGoogle() {
@@ -290,6 +337,140 @@ async function loadTeachersFromGoogle() {
     }
 
     throw lastError || new Error('Google Sheets не повернула дані');
+}
+
+function normalizePhotoUrl(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return '';
+
+    // якщо у комірці випадково залишився html-якір, дістанемо href
+    const hrefMatch = raw.match(/href\s*=\s*["']([^"']+)["']/i);
+    if (hrefMatch?.[1]) return normalizePhotoUrl(hrefMatch[1]);
+
+    // Google Drive share links -> direct view
+    // examples:
+    // - https://drive.google.com/file/d/<id>/view?...
+    // - https://drive.google.com/open?id=<id>
+    // - https://drive.google.com/uc?id=<id>&export=download
+    const fileMatch = raw.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
+    const idMatch = raw.match(/[?&]id=([^&]+)/i);
+    const ucMatch = raw.match(/drive\.google\.com\/uc\?id=([^&]+)/i);
+    const driveId = (fileMatch && fileMatch[1]) || (ucMatch && ucMatch[1]) || (idMatch && idMatch[1]) || '';
+    if (driveId) {
+        // Найстабільніше для <img> — thumbnail endpoint.
+        // Працює для файлів з доступом "Anyone with the link".
+        return `https://drive.google.com/thumbnail?id=${driveId}&sz=w400-h400`;
+    }
+
+    // Google Photos / other direct URLs
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return raw;
+}
+
+function renderAvatar(name, photoUrl, sizePx) {
+    const safeName = escapeHtml(name || '');
+    const safeUrl = escapeHtml(photoUrl || '');
+    const initialsText = initials(name || '');
+    const size = Number(sizePx) || 48;
+    const fallback = `<div class="w-[${size}px] h-[${size}px] rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">${escapeHtml(initialsText)}</div>`;
+    if (!safeUrl) return fallback;
+
+    // Якщо фото не завантажилось (403/непублічне/не картинка) — повертаємось до ініціалів.
+    const fallbackJs = `this.onerror=null;this.outerHTML=${JSON.stringify(fallback)};`;
+    // object-position: піднімаємо фокус трохи вище центру, щоб рідше обрізало обличчя
+    return `<img src="${safeUrl}" alt="${safeName}" class="w-[${size}px] h-[${size}px] rounded-full object-cover border border-gray-200" style="object-position: 50% 20%;" loading="lazy" referrerpolicy="no-referrer" onerror="${escapeHtml(fallbackJs)}" />`;
+}
+
+function extractGvizLink(cell) {
+    if (!cell) return '';
+    // 1) якщо значення само є URL
+    const v = String(cell.v ?? '').trim();
+    if (/^https?:\/\//i.test(v)) return v;
+
+    // 2) якщо formatted value містить URL
+    const f = String(cell.f ?? '').trim();
+    if (/^https?:\/\//i.test(f)) return f;
+
+    // 3) якщо це гіперпосилання (інколи GViz кладе URL в p)
+    const p = cell.p || {};
+    const possible = String(p?.link ?? p?.href ?? p?.url ?? '').trim();
+    if (/^https?:\/\//i.test(possible)) return possible;
+
+    // 4) якщо formatted value містить URL всередині тексту
+    const inText = f.match(/https?:\/\/\S+/i)?.[0] || v.match(/https?:\/\/\S+/i)?.[0] || '';
+    return inText;
+}
+
+async function loadTeacherPhotosFromGoogle() {
+    let lastError = null;
+    for (const url of PHOTOS_SHEET_URLS) {
+        try {
+            const text = await fetchTextOrGvizScript(url, {
+                timeoutMs: 7000,
+                attempts: 2,
+                retryDelayMs: 700
+            });
+            if (!text) continue;
+
+            const rows = url.includes('/gviz/')
+                ? parseGvizPhotos(text)
+                : parsePhotosCSV(text);
+            if (rows.size > 0) return rows;
+        } catch (e) {
+            lastError = e;
+        }
+    }
+    if (lastError) throw lastError;
+    return new Map();
+}
+
+function parsePhotosCSV(text) {
+    const rows = parseCSVData(text);
+    if (rows.length < 2) return new Map();
+    const headers = rows[0];
+    const idIdx = findHeaderIndex(headers, ['ID']);
+    const photoIdx = findHeaderIndex(headers, ['Фото', 'Photo', 'URL', 'Посилання', 'Лінк']);
+    if (idIdx < 0 || photoIdx < 0) return new Map();
+
+    const map = new Map();
+    for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
+        const id = parseInt(String(values[idIdx] || '').trim(), 10) || 0;
+        if (id <= 0) continue;
+        const url = normalizePhotoUrl(values[photoIdx]);
+        if (url) map.set(id, url);
+    }
+    return map;
+}
+
+function parseGvizPhotos(textOrPayload) {
+    const payload = typeof textOrPayload === 'string'
+        ? (() => {
+            const match = textOrPayload.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);?/);
+            if (!match || !match[1]) return null;
+            return JSON.parse(match[1]);
+        })()
+        : textOrPayload;
+    if (!payload) return new Map();
+
+    const table = payload?.table;
+    const cols = table?.cols || [];
+    const rows = table?.rows || [];
+    const headers = cols.map(c => (c?.label || '').trim());
+    const idIdx = findHeaderIndex(headers, ['ID']);
+    const photoIdx = findHeaderIndex(headers, ['Фото', 'Photo', 'URL', 'Посилання', 'Лінк']);
+    if (idIdx < 0 || photoIdx < 0) return new Map();
+
+    const map = new Map();
+    for (const row of rows) {
+        const cells = row?.c || [];
+        const id = parseInt(String(cells[idIdx]?.v ?? '').trim(), 10) || 0;
+        if (id <= 0) continue;
+        const raw = extractGvizLink(cells[photoIdx]);
+        const url = normalizePhotoUrl(raw);
+        if (url) map.set(id, url);
+    }
+    return map;
 }
 
 async function loadTrajectoriesFromGoogle() {
@@ -842,9 +1023,7 @@ function renderDirectory(app) {
                     <div class="teacher-card bg-white rounded-lg p-5 hover:shadow-lg transition cursor-pointer border border-gray-200"
                          onclick="location.hash='profile-${t.id}'">
                         <div class="flex items-start gap-4">
-                            <div class="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-                                ${initials(t.name)}
-                            </div>
+                            ${renderAvatar(t.name, t.photoUrl, 60)}
                             <div class="flex-1">
                                 <h3 class="font-semibold text-gray-900">${escapeHtml(t.name)}</h3>
                                 <p class="text-sm text-gray-600">${escapeHtml(t.position)}</p>
@@ -911,9 +1090,7 @@ function renderProfile(app, id) {
             
             <div class="bg-white rounded-lg p-6 mb-6 border border-gray-200">
                 <div class="flex items-start gap-6">
-                    <div class="w-20 h-20 rounded-full bg-blue-600 text-white flex items-center justify-center text-2xl font-bold">
-                        ${initials(teacher.name)}
-                    </div>
+                    ${renderAvatar(teacher.name, teacher.photoUrl, 96).replace('text-sm', 'text-2xl')}
                     <div class="flex-1">
                         <h1 class="text-3xl font-bold">${escapeHtml(teacher.name)}</h1>
                         <p class="text-lg text-gray-600 mt-1">${escapeHtml(teacher.position)}</p>
