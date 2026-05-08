@@ -46,6 +46,7 @@
 let allTeachers = [];
 let allTrajectories = [];
 let allCertPrograms = { 2025: [], 2026: [] };
+let planTables = { cpk: { headers: [], rows: [] }, internship: { headers: [], rows: [] } };
 let teacherPhotosById = new Map();
 let fileModifyTimes = {};
 let fileMonitoringInterval = null;
@@ -87,6 +88,23 @@ const CERT_SHEET_URLS = {
         `https://docs.google.com/spreadsheets/d/${CERT_SHEET_ID}/export?format=csv&gid=${CERT_2026_GID}`,
         `https://docs.google.com/spreadsheets/d/${CERT_SHEET_ID}/gviz/tq?tqx=out:csv&gid=${CERT_2026_GID}`,
         `https://docs.google.com/spreadsheets/d/${CERT_SHEET_ID}/gviz/tq?tqx=out:json&gid=${CERT_2026_GID}`
+    ]
+};
+
+// План КПК / стажування (вбудовані таблиці)
+const PLAN_SHEET_ID = '1wxe2RONgwb1r98MfNJdVpCWvB2b8dE6nORft3EyEO9Y';
+const PLAN_CPK_GID = '2054167909';
+const PLAN_INTERNSHIP_GID = '1135076712';
+const PLAN_SHEET_URLS = {
+    cpk: [
+        `https://docs.google.com/spreadsheets/d/${PLAN_SHEET_ID}/export?format=csv&gid=${PLAN_CPK_GID}`,
+        `https://docs.google.com/spreadsheets/d/${PLAN_SHEET_ID}/gviz/tq?tqx=out:csv&gid=${PLAN_CPK_GID}`,
+        `https://docs.google.com/spreadsheets/d/${PLAN_SHEET_ID}/gviz/tq?tqx=out:json&gid=${PLAN_CPK_GID}`
+    ],
+    internship: [
+        `https://docs.google.com/spreadsheets/d/${PLAN_SHEET_ID}/export?format=csv&gid=${PLAN_INTERNSHIP_GID}`,
+        `https://docs.google.com/spreadsheets/d/${PLAN_SHEET_ID}/gviz/tq?tqx=out:csv&gid=${PLAN_INTERNSHIP_GID}`,
+        `https://docs.google.com/spreadsheets/d/${PLAN_SHEET_ID}/gviz/tq?tqx=out:json&gid=${PLAN_INTERNSHIP_GID}`
     ]
 };
 
@@ -158,6 +176,16 @@ async function loadData() {
         } catch (e) {
             allCertPrograms = { 2025: [], 2026: [] };
             console.warn('⚠️  Не вдалося завантажити сертифікаційні програми:', e.message);
+        }
+
+        // 4. План КПК / стажування (внутрішні таблиці)
+        try {
+            planTables.cpk = await loadPlanTableFromGoogle('cpk');
+            planTables.internship = await loadPlanTableFromGoogle('internship');
+            console.log(`✅ План КПК: ${planTables.cpk.rows.length} рядків; План стажування: ${planTables.internship.rows.length} рядків`);
+        } catch (e) {
+            planTables = { cpk: { headers: [], rows: [] }, internship: { headers: [], rows: [] } };
+            console.warn('⚠️  Не вдалося завантажити планові таблиці:', e.message);
         }
         
         return true;
@@ -528,6 +556,102 @@ async function loadCertProgramsByYear(year) {
 
     if (lastError) throw lastError;
     return [];
+}
+
+async function loadPlanTableFromGoogle(kind) {
+    const urls = PLAN_SHEET_URLS[kind] || [];
+    let lastError = null;
+    for (const url of urls) {
+        try {
+            const text = await fetchTextOrGvizScript(url, {
+                timeoutMs: 7000,
+                attempts: 2,
+                retryDelayMs: 700
+            });
+            if (!text) continue;
+
+            // У режимі file:// fetchTextOrGvizScript може повернути GViz payload-об'єкт
+            // навіть якщо ми просили csv/export URL (бо воно автоматично конвертується в gviz json).
+            if (typeof text === 'object') {
+                const { headers, rows } = parseGvizGenericTable(text);
+                if (headers.length) return { headers, rows };
+            }
+
+            // csv (export або gviz out:csv)
+            const { headers, rows } = parseGenericCSVTable(String(text || ''));
+            if (headers.length) return { headers, rows };
+        } catch (e) {
+            lastError = e;
+        }
+    }
+    if (lastError) throw lastError;
+    return { headers: [], rows: [] };
+}
+
+function parseGenericCSVTable(text) {
+    const rows = parseCSVData(text);
+    if (rows.length < 1) return { headers: [], rows: [] };
+    return normalizeGenericTable(rows.map(r => (r || []).map(v => String(v ?? '').trim())));
+}
+
+function parseGvizGenericTable(textOrPayload) {
+    const payload = typeof textOrPayload === 'string'
+        ? (() => {
+            const match = textOrPayload.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);?/);
+            if (!match || !match[1]) return null;
+            return JSON.parse(match[1]);
+        })()
+        : textOrPayload;
+    if (!payload) return { headers: [], rows: [] };
+
+    const table = payload?.table;
+    const cols = table?.cols || [];
+    const rows = table?.rows || [];
+    const rawHeaders = cols.map(c => String(c?.label || '').trim());
+    const dataRows = rows.map(r => (r?.c || []).map(cell => String(cell?.f ?? cell?.v ?? '').trim()));
+    // GViz інколи віддає "не той" header (особливо коли в аркуші є заголовок-банер/злиті комірки).
+    // Тому нормалізуємо по першим рядкам.
+    const matrix = [rawHeaders, ...dataRows];
+    return normalizeGenericTable(matrix);
+}
+
+function normalizeGenericTable(matrix) {
+    // matrix: string[][]
+    const cleaned = (matrix || []).map(r => (r || []).map(v => String(v ?? '').trim()));
+    if (cleaned.length === 0) return { headers: [], rows: [] };
+
+    // 1) знайти рядок заголовків: серед перших 10 рядків беремо той, де найбільше непорожніх клітинок (>=2)
+    const scanLimit = Math.min(10, cleaned.length);
+    let headerRowIdx = 0;
+    let bestScore = -1;
+    for (let i = 0; i < scanLimit; i++) {
+        const row = cleaned[i];
+        const score = row.filter(v => v).length;
+        if (score > bestScore && score >= 2) {
+            bestScore = score;
+            headerRowIdx = i;
+        }
+    }
+
+    const rawHeaderRow = cleaned[headerRowIdx] || [];
+    // 2) колонки беремо тільки там, де заголовок непорожній
+    const colIndexes = [];
+    const headers = [];
+    for (let c = 0; c < rawHeaderRow.length; c++) {
+        const h = String(rawHeaderRow[c] || '').trim();
+        if (!h) continue;
+        colIndexes.push(c);
+        headers.push(h);
+    }
+    if (headers.length === 0) return { headers: [], rows: [] };
+
+    // 3) дані — після headerRowIdx; пропускаємо повністю порожні рядки
+    const dataRows = cleaned
+        .slice(headerRowIdx + 1)
+        .map(r => colIndexes.map(ci => String(r?.[ci] ?? '').trim()))
+        .filter(r => r.some(v => v));
+
+    return { headers, rows: dataRows };
 }
 
 function parseGvizTeachers(textOrPayload) {
@@ -978,6 +1102,8 @@ function parseRoute() {
     if (profileMatch) return { page: 'profile', id: parseInt(profileMatch[1], 10) };
 
     if (cleanHash === 'statistics') return { page: 'statistics', id: null };
+    if (cleanHash === 'plan-cpk') return { page: 'plan-cpk', id: null };
+    if (cleanHash === 'plan-internship') return { page: 'plan-internship', id: null };
 
     return { page: 'directory', id: null };
 }
@@ -995,9 +1121,129 @@ function renderApp() {
         renderCertPrograms(app, parseInt(id));
     } else if (page === 'statistics') {
         renderStatistics(app);
+    } else if (page === 'plan-cpk') {
+        renderPlanTable(app, '🗓️ План КПК', planTables.cpk, 'plan-cpk');
+    } else if (page === 'plan-internship') {
+        renderPlanTable(app, '🧰 План стажування', planTables.internship, 'plan-internship');
     } else {
         renderDirectory(app);
     }
+}
+
+function renderPlanTable(app, title, table, activePage) {
+    const headers = table?.headers || [];
+    const rows = table?.rows || [];
+    const nameColIdx = headers.findIndex(h => {
+        const nh = normalizeHeader(h);
+        return nh === normalizeHeader('П.І.П') || nh === 'піп' || nh === normalizeHeader('ПІП');
+    });
+    const idColIdx = headers.findIndex(h => normalizeHeader(h) === normalizeHeader('ID'));
+
+    const grouped = (() => {
+        if (nameColIdx < 0 && idColIdx < 0) return { groups: new Map(), order: [] };
+
+        const keyColIdx = idColIdx >= 0 ? idColIdx : nameColIdx;
+        const groups = new Map(); // startIndex -> size
+        const order = []; // start indices in order
+        let currentStart = null;
+        let currentKey = null;
+        let currentSize = 0;
+
+        const getKey = (i) => {
+            const raw = String(rows[i]?.[keyColIdx] ?? '').trim();
+            return raw;
+        };
+
+        for (let i = 0; i < rows.length; i++) {
+            const key = getKey(i);
+
+            if (key) {
+                if (currentStart === null || key !== currentKey) {
+                    if (currentStart !== null) {
+                        groups.set(currentStart, currentSize);
+                        order.push(currentStart);
+                    }
+                    currentStart = i;
+                    currentKey = key;
+                    currentSize = 1;
+                } else {
+                    currentSize++;
+                }
+            } else if (currentStart !== null) {
+                // якщо ключ порожній, але група вже почалась — продовжуємо
+                currentSize++;
+            }
+        }
+        if (currentStart !== null) {
+            groups.set(currentStart, currentSize);
+            order.push(currentStart);
+        }
+        return { groups, order };
+    })();
+
+    app.innerHTML = `
+        <div class="max-w-7xl mx-auto p-6 pb-24">
+            <button onclick="location.hash='directory'" class="mb-6 text-blue-600 hover:text-blue-800 font-medium">
+                ← Назад до карток
+            </button>
+            <h1 class="text-3xl font-bold mb-4">${escapeHtml(title)}</h1>
+            <div class="bg-white rounded-lg border border-gray-200 p-4 overflow-x-auto">
+                ${rows.length === 0 ? '<p class="text-gray-500 py-8 text-center">Немає даних</p>' : `
+                    <table class="w-full text-sm border-collapse min-w-[900px]">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                ${headers.map((h, colIdx) => {
+                                    const nh = normalizeHeader(h);
+                                    const base = 'border border-gray-300 px-3 py-2 text-center ';
+                                    const widthClass =
+                                        colIdx === nameColIdx
+                                            ? 'min-w-[260px] max-w-[320px]'
+                                            : (nh.includes("суб'єкт") ? 'min-w-[140px] max-w-[180px]' : '');
+                                    return `<th class="${base}${widthClass}">${escapeHtml(h)}</th>`;
+                                }).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map((r, i) => {
+                                const isGroupStart = nameColIdx >= 0 && grouped.groups.has(i);
+                                const groupSize = isGroupStart ? grouped.groups.get(i) : 0;
+                                const rowCells = headers.map((_, colIdx) => {
+                                    const value = String(r?.[colIdx] ?? '').trim();
+                                    // якщо в таблиці стоїть "—/–/-" як заглушка — залишаємо порожнім
+                                    const normalizedValue =
+                                        value === '—' || value === '–' || value === '-' ? '' : value;
+                                    // Порожні клітинки залишаємо порожніми
+                                    const cellText = escapeHtml(normalizedValue);
+
+                                    if (colIdx === nameColIdx && nameColIdx >= 0) {
+                                        if (isGroupStart) {
+                                            return `<td rowspan="${groupSize}" class="border border-gray-300 px-3 py-2 align-top font-medium text-center min-w-[260px] max-w-[320px]">${cellText}</td>`;
+                                        }
+                                        // якщо це продовження групи — клітинку ПІП не рендеримо (rowspan перекриє)
+                                        return '';
+                                    }
+
+                                    const nh = normalizeHeader(headers[colIdx] || '');
+                                    const widthClass =
+                                        colIdx === nameColIdx
+                                            ? 'min-w-[260px] max-w-[320px]'
+                                            : (nh.includes("суб'єкт") ? 'min-w-[140px] max-w-[180px]' : '');
+                                    return `<td class="border border-gray-300 px-3 py-2 text-center ${widthClass}">${cellText}</td>`;
+                                }).filter(Boolean).join('');
+
+                                return `
+                                <tr class="${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50">
+                                    ${rowCells}
+                                </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `}
+            </div>
+        </div>
+        ${renderBottomNav(activePage)}
+    `;
 }
 
 function renderDirectory(app) {
@@ -1452,6 +1698,8 @@ function renderCertPrograms(app, id) {
 function renderBottomNav(activePage) {
     const isCardsActive = activePage === 'directory';
     const isStatsActive = activePage === 'statistics';
+    const isPlanCpkActive = activePage === 'plan-cpk';
+    const isPlanInternshipActive = activePage === 'plan-internship';
     return `
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-20">
             <div class="max-w-7xl mx-auto px-4 py-3">
@@ -1474,14 +1722,26 @@ function renderBottomNav(activePage) {
                     >
                         📈 Показники педагогічної діяльності
                     </a>
-                    <a
-                        href="https://docs.google.com/spreadsheets/d/1wxe2RONgwb1r98MfNJdVpCWvB2b8dE6nORft3EyEO9Y/edit?gid=2054167909#gid=2054167909"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="px-6 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    <button
+                        onclick="location.hash='plan-cpk'"
+                        class="px-6 py-2 rounded-lg font-medium transition ${
+                            isPlanCpkActive
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }"
                     >
-                        🗓️ План КПК/стажування
-                    </a>
+                        🗓️ План КПК
+                    </button>
+                    <button
+                        onclick="location.hash='plan-internship'"
+                        class="px-6 py-2 rounded-lg font-medium transition ${
+                            isPlanInternshipActive
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }"
+                    >
+                        🧰 План стажування
+                    </button>
                     <button
                         onclick="location.hash='statistics'"
                         class="px-6 py-2 rounded-lg font-medium transition ${
