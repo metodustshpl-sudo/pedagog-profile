@@ -1700,13 +1700,14 @@ function renderBottomNav(activePage) {
     const isStatsActive = activePage === 'statistics';
     const isPlanCpkActive = activePage === 'plan-cpk';
     const isPlanInternshipActive = activePage === 'plan-internship';
+    const navBtn = 'inline-flex items-center justify-center text-center leading-tight';
     return `
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-20">
             <div class="max-w-7xl mx-auto px-4 py-3">
-                <div class="flex items-center justify-center gap-3">
+                <div class="flex items-center justify-center gap-3 flex-wrap">
                     <button
                         onclick="location.hash='directory'"
-                        class="px-6 py-2 rounded-lg font-medium transition ${
+                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition ${
                             isCardsActive
                                 ? 'bg-blue-600 text-white'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1718,7 +1719,7 @@ function renderBottomNav(activePage) {
                         href="https://xtiles.app/6637a473f4f47860e60402da"
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="px-6 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200 max-w-[220px]"
                     >
                         🔬 Науково-методична діяльність педагогів
                     </a>
@@ -1726,13 +1727,13 @@ function renderBottomNav(activePage) {
                         href="https://datastudio.google.com/reporting/c0c5592b-4023-4707-a20d-15530ca67ad3"
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="px-6 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200 max-w-[220px]"
                     >
                         📈 Показники педагогічної діяльності
                     </a>
                     <button
                         onclick="location.hash='plan-cpk'"
-                        class="px-6 py-2 rounded-lg font-medium transition ${
+                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition ${
                             isPlanCpkActive
                                 ? 'bg-blue-600 text-white'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1742,7 +1743,7 @@ function renderBottomNav(activePage) {
                     </button>
                     <button
                         onclick="location.hash='plan-internship'"
-                        class="px-6 py-2 rounded-lg font-medium transition ${
+                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition ${
                             isPlanInternshipActive
                                 ? 'bg-blue-600 text-white'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1752,7 +1753,7 @@ function renderBottomNav(activePage) {
                     </button>
                     <button
                         onclick="location.hash='statistics'"
-                        class="px-6 py-2 rounded-lg font-medium transition ${
+                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition ${
                             isStatsActive
                                 ? 'bg-blue-600 text-white'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
