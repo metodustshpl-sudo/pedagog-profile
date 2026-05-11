@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Педагогічний профіль Шепетівського ПЛ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .search-box { position: sticky; top: 0; z-index: 10; }
+        .shimmer { animation: shimmer 1.5s infinite; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .loading { opacity: 0.5; pointer-events: none; }
+        body.bg-gray-50 {
+            background:
+                radial-gradient(circle at 10% 10%, rgba(255,255,255,0.45), transparent 32%),
+                radial-gradient(circle at 90% 15%, rgba(142,156,173,0.25), transparent 28%),
+                linear-gradient(135deg, #dbe2ea 0%, #c3ceda 45%, #a6b4c2 100%);
+            min-height: 100vh;
+        }
+        .bg-white {
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            backdrop-filter: blur(4px);
+        }
+        .rounded-lg { border-radius: 1rem !important; }
+        .rounded { border-radius: 0.875rem !important; }
+        .bg-blue-600 {
+            background-image: linear-gradient(135deg, #2f7dbc, #1f5a90) !important;
+            border: 0;
+        }
+        .hover\:bg-blue-700:hover {
+            background-image: linear-gradient(135deg, #286da6, #174b78) !important;
+        }
+        .search-box {
+            border: 1px solid rgba(149, 163, 179, 0.35);
+            box-shadow: 0 8px 24px rgba(52, 77, 102, 0.12);
+        }
+
+        /* ===== Responsive tweaks (mobile/desktop) ===== */
+        .app-wrap { max-width: 80rem; margin: 0 auto; }
+        /* Нижня навігація */
+        .bottom-nav-btn { white-space: nowrap; }
+        .bottom-nav-btn--wrap { white-space: normal; }
+        .bottom-nav-btn--fixed { width: 260px; max-width: 260px; }
+
+        @media (max-width: 640px) {
+            .search-box { padding: 0.875rem !important; }
+            .teacher-card { padding: 0.875rem !important; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+<div id="app" class="min-h-screen"></div>
+
+<script>
+// ============= ГЛОБАЛЬНЕ СТАН =============
+let allTeachers = [];
+let allTrajectories = [];
+let allCertPrograms = { 2025: [], 2026: [] };
+let planTables = { cpk: { headers: [], rows: [] }, internship: { headers: [], rows: [] } };
+let teacherPhotosById = new Map();
+let fileModifyTimes = {};
+let fileMonitoringInterval = null;
+let isMonitoring = false;
+const IS_LOCALHOST = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+// GIF-и краще тримати невеликими (до ~1-2MB), щоб сторінка не гальмувала.
+// Можеш замінити ці URL на свої.
+const GIF_MODERN_EDU = 'https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif';
+const GIF_FUN_EDU = 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif';
+const SHEET_ID = '1kTV6H-FDcaM-SIb1pMHAX3CJb2n1AW9TNkPJH5vdeDQ';
+const SHEET_GID = '1777347792';
+const TEACHERS_SHEET_URLS = [
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`,
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${SHEET_GID}`,
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`
+];
+const PHOTOS_GID = '1342815223';
+const PHOTOS_SHEET_URLS = [
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${PHOTOS_GID}`,
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${PHOTOS_GID}`,
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${PHOTOS_GID}`
+];
+const TRAJECTORY_GID = '1495568701';
+const TRAJECTORY_SHEET_URLS = [
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${TRAJECTORY_GID}`,
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${TRAJECTORY_GID}`,
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${TRAJECTORY_GID}`
+];
+const CERT_SHEET_ID = '1myc82JsTeLIi8_llEFnxKjuqL_T2UkhSK5ARMIC9ogA';
+const CERT_2025_GID = '2054167909';
+const CERT_2026_GID = '177275302';
+const CERT_SHEET_URLS = {
+    2025: [
+        `https://docs.google.com/spreadsheets/d/${CERT_SHEET_ID}/export?format=csv&gid=${CERT_2025_GID}`,
+        `https://docs.google.com/spreadsheets/d/${CERT_SHEET_ID}/gviz/tq?tqx=out:csv&gid=${CERT_2025_GID}`,
+        `https://docs.google.com/spreadsheets/d/${CERT_SHEET_ID}/gviz/tq?tqx=out:json&gid=${CERT_2025_GID}`
+    ],
+    2026: [
+        `https://docs.google.com/spreadsheets/d/${CERT_SHEET_ID}/export?format=csv&gid=${CERT_2026_GID}`,
+        `https://docs.google.com/spreadsheets/d/${CERT_SHEET_ID}/gviz/tq?tqx=out:csv&gid=${CERT_2026_GID}`,
+        `https://docs.google.com/spreadsheets/d/${CERT_SHEET_ID}/gviz/tq?tqx=out:json&gid=${CERT_2026_GID}`
+    ]
+};
+
+// План КПК / стажування (вбудовані таблиці)
+const PLAN_SHEET_ID = '1wxe2RONgwb1r98MfNJdVpCWvB2b8dE6nORft3EyEO9Y';
+const PLAN_CPK_GID = '2054167909';
+const PLAN_INTERNSHIP_GID = '1135076712';
+const PLAN_SHEET_URLS = {
+    cpk: [
+        `https://docs.google.com/spreadsheets/d/${PLAN_SHEET_ID}/export?format=csv&gid=${PLAN_CPK_GID}`,
+        `https://docs.google.com/spreadsheets/d/${PLAN_SHEET_ID}/gviz/tq?tqx=out:csv&gid=${PLAN_CPK_GID}`,
+        `https://docs.google.com/spreadsheets/d/${PLAN_SHEET_ID}/gviz/tq?tqx=out:json&gid=${PLAN_CPK_GID}`
+    ],
+    internship: [
+        `https://docs.google.com/spreadsheets/d/${PLAN_SHEET_ID}/export?format=csv&gid=${PLAN_INTERNSHIP_GID}`,
+        `https://docs.google.com/spreadsheets/d/${PLAN_SHEET_ID}/gviz/tq?tqx=out:csv&gid=${PLAN_INTERNSHIP_GID}`,
+        `https://docs.google.com/spreadsheets/d/${PLAN_SHEET_ID}/gviz/tq?tqx=out:json&gid=${PLAN_INTERNSHIP_GID}`
+    ]
+};
+
+// ============= ЗАВАНТАЖЕННЯ ДАНИХ =============
+async function loadData() {
+    try {
+        console.log('📥 Завантаження даних...');
+        
+        // 1. Завантажуємо педагогів з головної Google-таблиці, fallback на локальний CSV
+        let teachersLoaded = false;
+        try {
+            allTeachers = await loadTeachersFromGoogle();
+            teachersLoaded = allTeachers.length > 0;
+            if (teachersLoaded) {
+                console.log(`✅ Завантажено ${allTeachers.length} педагогів з Google Sheets`);
+            }
+        } catch (e) {
+            console.warn('⚠️  Не вдалося завантажити педагогів з Google Sheets:', e.message);
+        }
+        
+        if (!teachersLoaded && IS_LOCALHOST) {
+            const teachersResponse = await fetchWithTimeout('./Педагоги.csv', 3000);
+            if (teachersResponse.ok) {
+                const teachersCSV = await teachersResponse.text();
+                allTeachers = parseSimpleCSV(teachersCSV, {
+                    idField: 'ID',
+                    nameField: 'П.І.П',
+                    positionField: 'Посада',
+                    birthField: 'Рік народження'
+                });
+                console.log(`✅ Завантажено ${allTeachers.length} педагогів з локального CSV`);
+            } else {
+                throw new Error('Не знайдено джерело даних педагогів');
+            }
+        } else if (!teachersLoaded) {
+            throw new Error('Не вдалося завантажити педагогів з Google Sheets');
+        }
+
+        // 1.1 Фото педагогів (мапа ID -> URL)
+        try {
+            teacherPhotosById = await loadTeacherPhotosFromGoogle();
+            // пришиваємо фото до вже завантажених teachers
+            allTeachers = allTeachers.map(t => ({
+                ...t,
+                photoUrl: teacherPhotosById.get(t.id) || ''
+            }));
+            console.log(`🖼️ Фото: знайдено ${teacherPhotosById.size} записів`);
+            console.log('🖼️ Фото (приклад):', teacherPhotosById.get(1) || teacherPhotosById.get(2) || teacherPhotosById.get(3) || '(порожньо)');
+        } catch (e) {
+            teacherPhotosById = new Map();
+            // лишаємо без фото
+            allTeachers = allTeachers.map(t => ({ ...t, photoUrl: '' }));
+            console.warn('⚠️  Не вдалося завантажити фото педагогів:', e.message);
+        }
+        
+        // 2. Завантажуємо освітні траєкторії з Google Sheets
+        try {
+            allTrajectories = await loadTrajectoriesFromGoogle();
+            console.log(`✅ Завантажено ${allTrajectories.length} рядків освітньої траєкторії`);
+        } catch (e) {
+            allTrajectories = [];
+            console.warn('⚠️  Не вдалося завантажити освітню траєкторію:', e.message);
+        }
+        
+        // 3. Завантажуємо сертифікаційні програми (2025/2026)
+        try {
+            allCertPrograms = await loadCertProgramsFromGoogle();
+            console.log(`✅ Сертифікаційні програми: 2025 (${allCertPrograms[2025].length}), 2026 (${allCertPrograms[2026].length})`);
+        } catch (e) {
+            allCertPrograms = { 2025: [], 2026: [] };
+            console.warn('⚠️  Не вдалося завантажити сертифікаційні програми:', e.message);
+        }
+
+        // 4. План КПК / стажування (внутрішні таблиці)
+        try {
+            planTables.cpk = await loadPlanTableFromGoogle('cpk');
+            planTables.internship = await loadPlanTableFromGoogle('internship');
+            console.log(`✅ План КПК: ${planTables.cpk.rows.length} рядків; План стажування: ${planTables.internship.rows.length} рядків`);
+        } catch (e) {
+            planTables = { cpk: { headers: [], rows: [] }, internship: { headers: [], rows: [] } };
+            console.warn('⚠️  Не вдалося завантажити планові таблиці:', e.message);
+        }
+        
+        return true;
+    } catch (e) {
+        console.error('❌ Помилка завантаження:', e.message);
+        window.__lastLoadError = e;
+        return false;
+    }
+}
+
+// ============= УТИЛІТИ =============
+async function fetchWithTimeout(url, timeoutMs) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { signal: controller.signal });
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+function openMobileNav() {
+    const el = document.getElementById('mobile-nav');
+    if (el) el.classList.remove('hidden');
+}
+
+function closeMobileNav() {
+    const el = document.getElementById('mobile-nav');
+    if (el) el.classList.add('hidden');
+}
+
+async function fetchTextWithRetry(url, options = {}) {
+    const { timeoutMs = 5000, attempts = 3, retryDelayMs = 600 } = options;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+            const response = await fetchWithTimeout(url, timeoutMs);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return await response.text();
+        } catch (e) {
+            lastError = e;
+            if (attempt < attempts) {
+                await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+            }
+        }
+    }
+
+    throw lastError || new Error('Помилка мережі');
+}
+
+function isLikelyCorsError(err) {
+    const msg = String(err?.message || err || '');
+    return msg.includes('Failed to fetch') || msg.includes('CORS') || msg.includes('Access-Control-Allow-Origin');
+}
+
+async function loadGvizPayloadViaScript(url, timeoutMs = 7000) {
+    // Працює навіть з file:// (origin null), бо <script> не підпадає під fetch/CORS так само.
+    return await new Promise((resolve, reject) => {
+        const prevGoogle = window.google;
+        const prevSetResponse = prevGoogle?.visualization?.Query?.setResponse;
+
+        let done = false;
+        const cleanup = () => {
+            try { script.remove(); } catch {}
+            if (prevGoogle) {
+                // відновлюємо попередній google (якщо був)
+                window.google = prevGoogle;
+                if (prevSetResponse) {
+                    window.google.visualization = window.google.visualization || {};
+                    window.google.visualization.Query = window.google.visualization.Query || {};
+                    window.google.visualization.Query.setResponse = prevSetResponse;
+                }
+            } else {
+                // прибираємо тимчасовий об'єкт
+                try { delete window.google; } catch { window.google = undefined; }
+            }
+        };
+
+        const timer = setTimeout(() => {
+            if (done) return;
+            done = true;
+            cleanup();
+            reject(new Error('GViz script timeout'));
+        }, timeoutMs);
+
+        // Ставимо тимчасовий хук, який перехопить setResponse(...)
+        window.google = window.google || {};
+        window.google.visualization = window.google.visualization || {};
+        window.google.visualization.Query = window.google.visualization.Query || {};
+        window.google.visualization.Query.setResponse = (payload) => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            cleanup();
+            resolve(payload);
+        };
+
+        const script = document.createElement('script');
+        script.src = url;
+        script.async = true;
+        script.onerror = () => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            cleanup();
+            reject(new Error('GViz script load error'));
+        };
+        document.head.appendChild(script);
+    });
+}
+
+async function fetchTextOrGvizScript(url, options = {}) {
+    const urlStr = String(url);
+    const isFile = window.location.protocol === 'file:';
+    const isGvizJson = urlStr.includes('/gviz/') && urlStr.includes('tqx=out:json');
+
+    // У режимі file:// fetch майже гарантовано впаде по CORS.
+    // Тому одразу йдемо через <script> на GViz JSON, навіть якщо дали csv/export URL.
+    if (isFile) {
+        const gvizUrl = isGvizJson ? urlStr : toGvizJsonUrl(urlStr);
+        return await loadGvizPayloadViaScript(gvizUrl, options.timeoutMs || 7000);
+    }
+
+    try {
+        return await fetchTextWithRetry(urlStr, options);
+    } catch (e) {
+        // Якщо це GViz JSON і схоже на CORS — пробуємо через <script>
+        if (isGvizJson && isLikelyCorsError(e)) {
+            return await loadGvizPayloadViaScript(urlStr, options.timeoutMs || 7000);
+        }
+        throw e;
+    }
+}
+
+function toGvizJsonUrl(anyUrl) {
+    // Підтримує:
+    // - .../export?format=csv&gid=...
+    // - .../gviz/tq?...&gid=...
+    // - .../edit?gid=...#gid=...
+    const str = String(anyUrl || '');
+    const idMatch = str.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    const gidMatch = str.match(/[?&#]gid=(\d+)/);
+    const sheetId = idMatch ? idMatch[1] : '';
+    const gid = gidMatch ? gidMatch[1] : '';
+    if (!sheetId || !gid) return str;
+    return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&gid=${gid}`;
+}
+
+async function loadTeachersFromGoogle() {
+    let lastError = null;
+
+    for (const url of TEACHERS_SHEET_URLS) {
+        try {
+            const text = await fetchTextOrGvizScript(url, {
+                timeoutMs: 7000,
+                attempts: 2,
+                retryDelayMs: 700
+            });
+            if (!text) continue;
+
+            if (url.includes('tqx=out:csv')) {
+                const teachers = parseSimpleCSV(text, {
+                    idField: 'ID',
+                    nameField: 'П.І.П',
+                    positionField: 'Посада',
+                    birthField: 'Рік народження'
+                });
+                if (teachers.length > 0) return teachers;
+            } else if (url.includes('/gviz/')) {
+                const teachers = parseGvizTeachers(text);
+                if (teachers.length > 0) return teachers;
+            } else {
+                const teachers = parseSimpleCSV(text, {
+                    idField: 'ID',
+                    nameField: 'П.І.П',
+                    positionField: 'Посада',
+                    birthField: 'Рік народження'
+                });
+                if (teachers.length > 0) return teachers;
+            }
+        } catch (e) {
+            lastError = new Error(`${e.message} (${url})`);
+        }
+    }
+
+    throw lastError || new Error('Google Sheets не повернула дані');
+}
+
+function normalizePhotoUrl(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return '';
+
+    // якщо у комірці випадково залишився html-якір, дістанемо href
+    const hrefMatch = raw.match(/href\s*=\s*["']([^"']+)["']/i);
+    if (hrefMatch?.[1]) return normalizePhotoUrl(hrefMatch[1]);
+
+    // Google Drive share links -> direct view
+    // examples:
+    // - https://drive.google.com/file/d/<id>/view?...
+    // - https://drive.google.com/open?id=<id>
+    // - https://drive.google.com/uc?id=<id>&export=download
+    const fileMatch = raw.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
+    const idMatch = raw.match(/[?&]id=([^&]+)/i);
+    const ucMatch = raw.match(/drive\.google\.com\/uc\?id=([^&]+)/i);
+    const driveId = (fileMatch && fileMatch[1]) || (ucMatch && ucMatch[1]) || (idMatch && idMatch[1]) || '';
+    if (driveId) {
+        // Найстабільніше для <img> — thumbnail endpoint.
+        // Працює для файлів з доступом "Anyone with the link".
+        return `https://drive.google.com/thumbnail?id=${driveId}&sz=w400-h400`;
+    }
+
+    // Google Photos / other direct URLs
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return raw;
+}
+
+function renderAvatar(name, photoUrl, sizePx) {
+    const safeName = escapeHtml(name || '');
+    const safeUrl = escapeHtml(photoUrl || '');
+    const initialsText = initials(name || '');
+    const size = Number(sizePx) || 48;
+    const fallback = `<div class="w-[${size}px] h-[${size}px] rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">${escapeHtml(initialsText)}</div>`;
+    if (!safeUrl) return fallback;
+
+    // Якщо фото не завантажилось (403/непублічне/не картинка) — повертаємось до ініціалів.
+    const fallbackJs = `this.onerror=null;this.outerHTML=${JSON.stringify(fallback)};`;
+    // object-position: піднімаємо фокус трохи вище центру, щоб рідше обрізало обличчя
+    return `<img src="${safeUrl}" alt="${safeName}" class="w-[${size}px] h-[${size}px] rounded-full object-cover border border-gray-200" style="object-position: 50% 20%;" loading="lazy" referrerpolicy="no-referrer" onerror="${escapeHtml(fallbackJs)}" />`;
+}
+
+function extractGvizLink(cell) {
+    if (!cell) return '';
+    // 1) якщо значення само є URL
+    const v = String(cell.v ?? '').trim();
+    if (/^https?:\/\//i.test(v)) return v;
+
+    // 2) якщо formatted value містить URL
+    const f = String(cell.f ?? '').trim();
+    if (/^https?:\/\//i.test(f)) return f;
+
+    // 3) якщо це гіперпосилання (інколи GViz кладе URL в p)
+    const p = cell.p || {};
+    const possible = String(p?.link ?? p?.href ?? p?.url ?? '').trim();
+    if (/^https?:\/\//i.test(possible)) return possible;
+
+    // 4) якщо formatted value містить URL всередині тексту
+    const inText = f.match(/https?:\/\/\S+/i)?.[0] || v.match(/https?:\/\/\S+/i)?.[0] || '';
+    return inText;
+}
+
+async function loadTeacherPhotosFromGoogle() {
+    let lastError = null;
+    for (const url of PHOTOS_SHEET_URLS) {
+        try {
+            const text = await fetchTextOrGvizScript(url, {
+                timeoutMs: 7000,
+                attempts: 2,
+                retryDelayMs: 700
+            });
+            if (!text) continue;
+
+            const rows = url.includes('/gviz/')
+                ? parseGvizPhotos(text)
+                : parsePhotosCSV(text);
+            if (rows.size > 0) return rows;
+        } catch (e) {
+            lastError = e;
+        }
+    }
+    if (lastError) throw lastError;
+    return new Map();
+}
+
+function parsePhotosCSV(text) {
+    const rows = parseCSVData(text);
+    if (rows.length < 2) return new Map();
+    const headers = rows[0];
+    const idIdx = findHeaderIndex(headers, ['ID']);
+    const photoIdx = findHeaderIndex(headers, ['Фото', 'Photo', 'URL', 'Посилання', 'Лінк']);
+    if (idIdx < 0 || photoIdx < 0) return new Map();
+
+    const map = new Map();
+    for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
+        const id = parseInt(String(values[idIdx] || '').trim(), 10) || 0;
+        if (id <= 0) continue;
+        const url = normalizePhotoUrl(values[photoIdx]);
+        if (url) map.set(id, url);
+    }
+    return map;
+}
+
+function parseGvizPhotos(textOrPayload) {
+    const payload = typeof textOrPayload === 'string'
+        ? (() => {
+            const match = textOrPayload.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);?/);
+            if (!match || !match[1]) return null;
+            return JSON.parse(match[1]);
+        })()
+        : textOrPayload;
+    if (!payload) return new Map();
+
+    const table = payload?.table;
+    const cols = table?.cols || [];
+    const rows = table?.rows || [];
+    const headers = cols.map(c => (c?.label || '').trim());
+    const idIdx = findHeaderIndex(headers, ['ID']);
+    const photoIdx = findHeaderIndex(headers, ['Фото', 'Photo', 'URL', 'Посилання', 'Лінк']);
+    if (idIdx < 0 || photoIdx < 0) return new Map();
+
+    const map = new Map();
+    for (const row of rows) {
+        const cells = row?.c || [];
+        const id = parseInt(String(cells[idIdx]?.v ?? '').trim(), 10) || 0;
+        if (id <= 0) continue;
+        const raw = extractGvizLink(cells[photoIdx]);
+        const url = normalizePhotoUrl(raw);
+        if (url) map.set(id, url);
+    }
+    return map;
+}
+
+async function loadTrajectoriesFromGoogle() {
+    let lastError = null;
+
+    for (const url of TRAJECTORY_SHEET_URLS) {
+        try {
+            const text = await fetchTextOrGvizScript(url, {
+                timeoutMs: 7000,
+                attempts: 2,
+                retryDelayMs: 700
+            });
+            if (!text) continue;
+
+            const rows = url.includes('/gviz/')
+                ? parseGvizTrajectory(text)
+                : parseTrajectoryCSV(text);
+            if (rows.length > 0) return rows;
+        } catch (e) {
+            lastError = e;
+        }
+    }
+
+    throw lastError || new Error('Google Sheets не повернула дані освітньої траєкторії');
+}
+
+async function loadCertProgramsFromGoogle() {
+    return {
+        2025: await loadCertProgramsByYear(2025),
+        2026: await loadCertProgramsByYear(2026)
+    };
+}
+
+async function loadCertProgramsByYear(year) {
+    const urls = CERT_SHEET_URLS[year] || [];
+    let lastError = null;
+
+    for (const url of urls) {
+        try {
+            const text = await fetchTextOrGvizScript(url, {
+                timeoutMs: 7000,
+                attempts: 2,
+                retryDelayMs: 700
+            });
+            if (!text) continue;
+
+            const rows = url.includes('/gviz/')
+                ? parseGvizCertPrograms(text, year)
+                : parseCertProgramsCSV(text, year);
+            if (rows.length > 0) return rows;
+        } catch (e) {
+            lastError = e;
+        }
+    }
+
+    if (lastError) throw lastError;
+    return [];
+}
+
+async function loadPlanTableFromGoogle(kind) {
+    const urls = PLAN_SHEET_URLS[kind] || [];
+    let lastError = null;
+    for (const url of urls) {
+        try {
+            const text = await fetchTextOrGvizScript(url, {
+                timeoutMs: 7000,
+                attempts: 2,
+                retryDelayMs: 700
+            });
+            if (!text) continue;
+
+            // У режимі file:// fetchTextOrGvizScript може повернути GViz payload-об'єкт
+            // навіть якщо ми просили csv/export URL (бо воно автоматично конвертується в gviz json).
+            if (typeof text === 'object') {
+                const { headers, rows } = parseGvizGenericTable(text);
+                if (headers.length) return { headers, rows };
+            }
+
+            // csv (export або gviz out:csv)
+            const { headers, rows } = parseGenericCSVTable(String(text || ''));
+            if (headers.length) return { headers, rows };
+        } catch (e) {
+            lastError = e;
+        }
+    }
+    if (lastError) throw lastError;
+    return { headers: [], rows: [] };
+}
+
+function parseGenericCSVTable(text) {
+    const rows = parseCSVData(text);
+    if (rows.length < 1) return { headers: [], rows: [] };
+    return normalizeGenericTable(rows.map(r => (r || []).map(v => String(v ?? '').trim())));
+}
+
+function parseGvizGenericTable(textOrPayload) {
+    const payload = typeof textOrPayload === 'string'
+        ? (() => {
+            const match = textOrPayload.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);?/);
+            if (!match || !match[1]) return null;
+            return JSON.parse(match[1]);
+        })()
+        : textOrPayload;
+    if (!payload) return { headers: [], rows: [] };
+
+    const table = payload?.table;
+    const cols = table?.cols || [];
+    const rows = table?.rows || [];
+    const rawHeaders = cols.map(c => String(c?.label || '').trim());
+    const dataRows = rows.map(r => (r?.c || []).map(cell => String(cell?.f ?? cell?.v ?? '').trim()));
+    // GViz інколи віддає "не той" header (особливо коли в аркуші є заголовок-банер/злиті комірки).
+    // Тому нормалізуємо по першим рядкам.
+    const matrix = [rawHeaders, ...dataRows];
+    return normalizeGenericTable(matrix);
+}
+
+function normalizeGenericTable(matrix) {
+    // matrix: string[][]
+    const cleaned = (matrix || []).map(r => (r || []).map(v => String(v ?? '').trim()));
+    if (cleaned.length === 0) return { headers: [], rows: [] };
+
+    // 1) знайти рядок заголовків: серед перших 10 рядків беремо той, де найбільше непорожніх клітинок (>=2)
+    const scanLimit = Math.min(10, cleaned.length);
+    let headerRowIdx = 0;
+    let bestScore = -1;
+    for (let i = 0; i < scanLimit; i++) {
+        const row = cleaned[i];
+        const score = row.filter(v => v).length;
+        if (score > bestScore && score >= 2) {
+            bestScore = score;
+            headerRowIdx = i;
+        }
+    }
+
+    const rawHeaderRow = cleaned[headerRowIdx] || [];
+    // 2) колонки беремо тільки там, де заголовок непорожній
+    const colIndexes = [];
+    const headers = [];
+    for (let c = 0; c < rawHeaderRow.length; c++) {
+        const h = String(rawHeaderRow[c] || '').trim();
+        if (!h) continue;
+        colIndexes.push(c);
+        headers.push(h);
+    }
+    if (headers.length === 0) return { headers: [], rows: [] };
+
+    // 3) дані — після headerRowIdx; пропускаємо повністю порожні рядки
+    const dataRows = cleaned
+        .slice(headerRowIdx + 1)
+        .map(r => colIndexes.map(ci => String(r?.[ci] ?? '').trim()))
+        .filter(r => r.some(v => v));
+
+    return { headers, rows: dataRows };
+}
+
+function parseGvizTeachers(textOrPayload) {
+    const payload = typeof textOrPayload === 'string'
+        ? (() => {
+            const match = textOrPayload.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);?/);
+            if (!match || !match[1]) return null;
+            return JSON.parse(match[1]);
+        })()
+        : textOrPayload;
+    if (!payload) return [];
+    const table = payload?.table;
+    const cols = table?.cols || [];
+    const rows = table?.rows || [];
+
+    const colLabels = cols.map(c => (c?.label || '').trim());
+    const idIdx = colLabels.indexOf('ID');
+    const nameIdx = colLabels.indexOf('П.І.П');
+    const posIdx = colLabels.indexOf('Посада');
+    const birthIdx = colLabels.indexOf('Рік народження');
+    const combinedPosIdx = colLabels.indexOf('Суміщена посада');
+    const eduIdx = colLabels.indexOf('Навчальний заклад, рік закінчення');
+    const eduLevelIdx = colLabels.indexOf('Освітньо-кваліфікаційний рівень');
+    const specialtyIdx = colLabels.indexOf('Спеціальність за дипломом');
+    const qualificationIdx = colLabels.indexOf('Кваліфікація за дипломом');
+    const workerRankIdx = colLabels.indexOf('Робітничий розряд за професією/професіям');
+    const totalExpIdx = colLabels.indexOf('Стаж заг');
+    const pedExpIdx = colLabels.indexOf('Стаж пед');
+    const roleExpIdx = colLabels.indexOf('Стаж на посаді');
+    const mainCatIdx = colLabels.indexOf('Квал. категорія; Тар. розряд за основною посадою');
+    const combinedCatIdx = colLabels.indexOf('Квал. категорія; Тар. розряд за суміщеною посадою');
+    const titleIdx = colLabels.indexOf('Пед. звання');
+    if (idIdx < 0 || nameIdx < 0 || posIdx < 0) return [];
+
+    const teachers = [];
+    for (const row of rows) {
+        const cells = row?.c || [];
+        const id = parseInt(String(cells[idIdx]?.v ?? '').trim(), 10) || 0;
+        if (id <= 0) continue;
+
+        teachers.push({
+            id,
+            name: String(cells[nameIdx]?.v ?? '').trim(),
+            position: String(cells[posIdx]?.v ?? '').trim(),
+            birthDate: String(cells[birthIdx]?.f ?? cells[birthIdx]?.v ?? '').trim(),
+            combinedPosition: String(cells[combinedPosIdx]?.v ?? '').trim(),
+            education: String(cells[eduIdx]?.v ?? '').trim(),
+            educationLevel: String(cells[eduLevelIdx]?.v ?? '').trim(),
+            specialty: String(cells[specialtyIdx]?.v ?? '').trim(),
+            qualification: String(cells[qualificationIdx]?.v ?? '').trim(),
+            workerRank: String(cells[workerRankIdx]?.v ?? '').trim(),
+            totalExperience: String(cells[totalExpIdx]?.v ?? '').trim(),
+            pedagogicalExperience: String(cells[pedExpIdx]?.v ?? '').trim(),
+            positionExperience: String(cells[roleExpIdx]?.v ?? '').trim(),
+            mainCategory: String(cells[mainCatIdx]?.v ?? '').trim(),
+            combinedCategory: String(cells[combinedCatIdx]?.v ?? '').trim(),
+            pedagogicalTitle: String(cells[titleIdx]?.v ?? '').trim()
+        });
+    }
+
+    return teachers.sort((a, b) => a.id - b.id);
+}
+
+// ============= ПАРСЕРИ =============
+function parseSimpleCSV(text, options = {}) {
+    const { idField = 'ID', nameField = 'П.І.П', positionField = 'Посада', birthField = 'Рік народження' } = options;
+    const rows = parseCSVData(text);
+    
+    if (rows.length < 2) return [];
+    
+    const headers = rows[0];
+    const idIdx = headers.indexOf(idField);
+    const nameIdx = headers.indexOf(nameField);
+    const posIdx = headers.indexOf(positionField);
+    const birthIdx = headers.indexOf(birthField);
+    const combinedPosIdx = headers.indexOf('Суміщена посада');
+    const eduIdx = headers.indexOf('Навчальний заклад, рік закінчення');
+    const eduLevelIdx = headers.indexOf('Освітньо-кваліфікаційний рівень');
+    const specialtyIdx = headers.indexOf('Спеціальність за дипломом');
+    const qualificationIdx = headers.indexOf('Кваліфікація за дипломом');
+    const workerRankIdx = headers.indexOf('Робітничий розряд за професією/професіям');
+    const totalExpIdx = headers.indexOf('Стаж заг');
+    const pedExpIdx = headers.indexOf('Стаж пед');
+    const roleExpIdx = headers.indexOf('Стаж на посаді');
+    const mainCatIdx = headers.indexOf('Квал. категорія; Тар. розряд за основною посадою');
+    const combinedCatIdx = headers.indexOf('Квал. категорія; Тар. розряд за суміщеною посадою');
+    const titleIdx = headers.indexOf('Пед. звання');
+    
+    const teachers = [];
+    for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
+        const id = parseInt(values[idIdx]) || 0;
+        
+        if (id <= 0) continue;
+        
+        teachers.push({
+            id: id,
+            name: (values[nameIdx] || '').trim(),
+            position: (values[posIdx] || '').trim(),
+            birthDate: (values[birthIdx] || '').trim(),
+            combinedPosition: (values[combinedPosIdx] || '').trim(),
+            education: (values[eduIdx] || '').trim(),
+            educationLevel: (values[eduLevelIdx] || '').trim(),
+            specialty: (values[specialtyIdx] || '').trim(),
+            qualification: (values[qualificationIdx] || '').trim(),
+            workerRank: (values[workerRankIdx] || '').trim(),
+            totalExperience: (values[totalExpIdx] || '').trim(),
+            pedagogicalExperience: (values[pedExpIdx] || '').trim(),
+            positionExperience: (values[roleExpIdx] || '').trim(),
+            mainCategory: (values[mainCatIdx] || '').trim(),
+            combinedCategory: (values[combinedCatIdx] || '').trim(),
+            pedagogicalTitle: (values[titleIdx] || '').trim()
+        });
+    }
+    
+    return teachers.sort((a, b) => a.id - b.id);
+}
+
+function parseCertificationsCSV(text) {
+    const rows = parseCSVData(text);
+    if (rows.length < 2) return [];
+    
+    const headers = rows[0];
+    const certs = [];
+    
+    for (let i = 1; i < rows.length; i++) {
+        const values = rows[i];
+        const id = parseInt(values[0]) || 0;
+        
+        if (id <= 0) continue;
+        
+        const cert = {
+            id: id,
+            name: (values[1] || '').trim(),
+            form: (values[2] || '').trim(),
+            program: (values[3] || '').trim(),
+            location: (values[4] || '').trim(),
+            status: (values[5] || '').trim(),
+            date: (values[6] || '').trim(),
+            hours: (values[7] || '').trim(),
+            document: (values[8] || '').trim(),
+            ects: (values[9] || '').trim(),
+            year: (values[10] || '').trim()
+        };
+        
+        certs.push(cert);
+    }
+    
+    return certs;
+}
+
+function normalizeHeader(text) {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function findHeaderIndex(headers, candidates) {
+    const normalized = headers.map(normalizeHeader);
+    for (const candidate of candidates) {
+        const idx = normalized.indexOf(normalizeHeader(candidate));
+        if (idx >= 0) return idx;
+    }
+    return -1;
+}
+
+function mapTrajectoryFromValues(values, idx) {
+    const id = parseInt(String(values[idx.id] || '').trim(), 10) || 0;
+    if (id <= 0) return null;
+
+    return {
+        id,
+        position: String(values[idx.position] || '').trim(),
+        lastAttestationDate: String(values[idx.lastAttestationDate] || '').trim(),
+        nextAttestationDate: String(values[idx.nextAttestationDate] || '').trim(),
+        lastCpkDate: String(values[idx.lastCpkDate] || '').trim(),
+        cpkSubject: String(values[idx.cpkSubject] || '').trim(),
+        nextCpkDate: String(values[idx.nextCpkDate] || '').trim(),
+        internshipDate: String(values[idx.internshipDate] || '').trim(),
+        professionRank: String(values[idx.professionRank] || '').trim(),
+        internshipSubject: String(values[idx.internshipSubject] || '').trim(),
+        portfolioLink: String(values[idx.portfolioLink] || '').trim(),
+        report2526Link: String(values[idx.report2526Link] || '').trim(),
+        report2425Link: String(values[idx.report2425Link] || '').trim()
+    };
+}
+
+function buildTrajectoryIndex(headers) {
+    return {
+        id: findHeaderIndex(headers, ['ID']),
+        position: findHeaderIndex(headers, ['Посада']),
+        lastAttestationDate: findHeaderIndex(headers, ['Дата останньої атестації']),
+        nextAttestationDate: findHeaderIndex(headers, ['Дата наступної атестації']),
+        lastCpkDate: findHeaderIndex(headers, ['Дата проходження останніх КПК']),
+        cpkSubject: findHeaderIndex(headers, ["Суб'єкт КПК"]),
+        nextCpkDate: findHeaderIndex(headers, ['Дата наступного проходження КПК']),
+        internshipDate: findHeaderIndex(headers, ['Дата проходження стажування']),
+        professionRank: findHeaderIndex(headers, ['Професія/розряд']),
+        internshipSubject: findHeaderIndex(headers, ["Суб'єкт стажування"]),
+        portfolioLink: findHeaderIndex(headers, ['Покликання на електронне портфоліо педагога']),
+        report2526Link: findHeaderIndex(headers, ['Покликання на звіт педагога 2025/2026н.р.']),
+        report2425Link: findHeaderIndex(headers, ['Покликання на звіт педагога 2024/2025н.р.'])
+    };
+}
+
+function parseTrajectoryCSV(text) {
+    const rows = parseCSVData(text);
+    if (rows.length < 2) return [];
+
+    const headers = rows[0];
+    const idx = buildTrajectoryIndex(headers);
+    if (idx.id < 0) return [];
+
+    const result = [];
+    for (let i = 1; i < rows.length; i++) {
+        const record = mapTrajectoryFromValues(rows[i], idx);
+        if (record) result.push(record);
+    }
+    return result;
+}
+
+function parseGvizTrajectory(textOrPayload) {
+    const payload = typeof textOrPayload === 'string'
+        ? (() => {
+            const match = textOrPayload.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);?/);
+            if (!match || !match[1]) return null;
+            return JSON.parse(match[1]);
+        })()
+        : textOrPayload;
+    if (!payload) return [];
+    const table = payload?.table;
+    const cols = table?.cols || [];
+    const rows = table?.rows || [];
+    const headers = cols.map(c => (c?.label || '').trim());
+    const idx = buildTrajectoryIndex(headers);
+    if (idx.id < 0) return [];
+
+    const result = [];
+    for (const row of rows) {
+        const cells = row?.c || [];
+        const values = cells.map(cell => String(cell?.f ?? cell?.v ?? '').trim());
+        const record = mapTrajectoryFromValues(values, idx);
+        if (record) result.push(record);
+    }
+    return result;
+}
+
+function buildCertIndex(headers) {
+    return {
+        id: findHeaderIndex(headers, ['ID']),
+        name: findHeaderIndex(headers, ['П.І.П']),
+        cpkSubject: findHeaderIndex(headers, ["Суб'єкт КПК"]),
+        cpkStatus: findHeaderIndex(headers, ["Статус суб'єкта КПК ліцензований/неліцензований", "Статус суб'єкта КПК"]),
+        form: findHeaderIndex(headers, ['Форма навчання']),
+        topic: findHeaderIndex(headers, ['Тема навчання']),
+        certificate: findHeaderIndex(headers, ['Сертифікат серія, номер', 'Сертифікат']),
+        issueDate: findHeaderIndex(headers, ['Дата видачі']),
+        hours: findHeaderIndex(headers, ['Кількість годин']),
+        ects: findHeaderIndex(headers, ['кредити ЕКТС', 'кредити ЕКТС,'])
+    };
+}
+
+function mapCertFromValues(values, idx, year) {
+    const id = parseInt(String(values[idx.id] || '').trim(), 10) || 0;
+    if (id <= 0) return null;
+
+    return {
+        id,
+        year,
+        name: String(values[idx.name] || '').trim(),
+        cpkSubject: String(values[idx.cpkSubject] || '').trim(),
+        cpkStatus: String(values[idx.cpkStatus] || '').trim(),
+        form: String(values[idx.form] || '').trim(),
+        topic: String(values[idx.topic] || '').trim(),
+        certificate: String(values[idx.certificate] || '').trim(),
+        issueDate: String(values[idx.issueDate] || '').trim(),
+        hours: String(values[idx.hours] || '').trim(),
+        ects: String(values[idx.ects] || '').trim()
+    };
+}
+
+function parseCertProgramsCSV(text, year) {
+    const rows = parseCSVData(text);
+    if (rows.length < 2) return [];
+    const headers = rows[0];
+    const idx = buildCertIndex(headers);
+    if (idx.id < 0) return [];
+
+    const result = [];
+    for (let i = 1; i < rows.length; i++) {
+        const rec = mapCertFromValues(rows[i], idx, year);
+        if (rec) result.push(rec);
+    }
+    return result;
+}
+
+function parseGvizCertPrograms(textOrPayload, year) {
+    const payload = typeof textOrPayload === 'string'
+        ? (() => {
+            const match = textOrPayload.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);?/);
+            if (!match || !match[1]) return null;
+            return JSON.parse(match[1]);
+        })()
+        : textOrPayload;
+    if (!payload) return [];
+    const table = payload?.table;
+    const cols = table?.cols || [];
+    const rows = table?.rows || [];
+    const headers = cols.map(c => (c?.label || '').trim());
+    const idx = buildCertIndex(headers);
+    if (idx.id < 0) return [];
+
+    const result = [];
+    for (const row of rows) {
+        const cells = row?.c || [];
+        const values = cells.map(cell => String(cell?.f ?? cell?.v ?? '').trim());
+        const rec = mapCertFromValues(values, idx, year);
+        if (rec) result.push(rec);
+    }
+    return result;
+}
+
+function parseCSVData(text) {
+    const rows = [];
+    let current_row = [];
+    let current_field = '';
+    let in_quotes = false;
+    let i = 0;
+    
+    while (i < text.length) {
+        const char = text[i];
+        
+        if (char === '"') {
+            if (in_quotes && text[i + 1] === '"') {
+                current_field += '"';
+                i += 2;
+            } else {
+                in_quotes = !in_quotes;
+                i++;
+            }
+        } else if (char === ',' && !in_quotes) {
+            current_row.push(current_field.trim());
+            current_field = '';
+            i++;
+        } else if ((char === '\n' || char === '\r') && !in_quotes) {
+            if (current_field || current_row.length > 0) {
+                current_row.push(current_field.trim());
+                if (current_row.some(v => v)) {
+                    rows.push(current_row);
+                }
+                current_row = [];
+                current_field = '';
+            }
+            if (char === '\r' && text[i + 1] === '\n') i++;
+            i++;
+        } else {
+            current_field += char;
+            i++;
+        }
+    }
+    
+    if (current_field || current_row.length > 0) {
+        current_row.push(current_field.trim());
+        if (current_row.some(v => v)) {
+            rows.push(current_row);
+        }
+    }
+    
+    return rows;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function initials(name) {
+    return name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+}
+
+// ============= МОНІТОРИНГ ФАЙЛІВ =============
+async function checkFileChanges() {
+    const files = ['./Педагоги.csv'];
+    let changed = false;
+    
+    for (const file of files) {
+        try {
+            const response = await fetchWithTimeout(file, 2000);
+            if (response.ok) {
+                const lastModified = response.headers.get('last-modified');
+                if (lastModified && fileModifyTimes[file] && fileModifyTimes[file] !== lastModified) {
+                    console.log(`📝 Файл змінився: ${file}`);
+                    changed = true;
+                }
+                fileModifyTimes[file] = lastModified;
+            }
+        } catch (e) {
+            console.warn(`⚠️  Не можна перевірити ${file}:`, e.message);
+        }
+    }
+    
+    if (changed) {
+        console.log('🔄 Перезавантажую дані...');
+        await loadData();
+        const { page, id } = parseRoute();
+        
+        if (page === 'trajectory' && id) {
+            renderTrajectory(document.getElementById('app'), id);
+        } else if (page === 'cert-programs' && id) {
+            renderCertPrograms(document.getElementById('app'), id);
+        } else {
+            renderApp();
+        }
+    }
+}
+
+function startFileMonitoring() {
+    if (!IS_LOCALHOST) return;
+    if (isMonitoring) return;
+    isMonitoring = true;
+    console.log('👁️  Запущено моніторинг файлів...');
+    fileMonitoringInterval = setInterval(checkFileChanges, 5000);
+}
+
+function stopFileMonitoring() {
+    if (fileMonitoringInterval) {
+        clearInterval(fileMonitoringInterval);
+        fileMonitoringInterval = null;
+        isMonitoring = false;
+        console.log('⛔ Моніторинг файлів зупинено');
+    }
+}
+
+// ============= РЕНДЕРИНГ =============
+function parseRoute() {
+    const hash = window.location.hash.slice(1) || 'directory';
+    const cleanHash = hash.split('?')[0];
+
+    const certMatch = cleanHash.match(/^cert-programs-(\d+)$/);
+    if (certMatch) return { page: 'cert-programs', id: parseInt(certMatch[1], 10) };
+
+    const trajectoryMatch = cleanHash.match(/^trajectory-(\d+)$/);
+    if (trajectoryMatch) return { page: 'trajectory', id: parseInt(trajectoryMatch[1], 10) };
+
+    const profileMatch = cleanHash.match(/^profile-(\d+)$/);
+    if (profileMatch) return { page: 'profile', id: parseInt(profileMatch[1], 10) };
+
+    if (cleanHash === 'statistics') return { page: 'statistics', id: null };
+    if (cleanHash === 'plan-cpk') return { page: 'plan-cpk', id: null };
+    if (cleanHash === 'plan-internship') return { page: 'plan-internship', id: null };
+
+    return { page: 'directory', id: null };
+}
+
+function renderApp() {
+    const { page, id } = parseRoute();
+    
+    const app = document.getElementById('app');
+    
+    if (page === 'profile' && id) {
+        renderProfile(app, parseInt(id));
+    } else if (page === 'trajectory' && id) {
+        renderTrajectory(app, parseInt(id));
+    } else if (page === 'cert-programs' && id) {
+        renderCertPrograms(app, parseInt(id));
+    } else if (page === 'statistics') {
+        renderStatistics(app);
+    } else if (page === 'plan-cpk') {
+        renderPlanTable(app, '🗓️ План КПК', planTables.cpk, 'plan-cpk');
+    } else if (page === 'plan-internship') {
+        renderPlanTable(app, '🧰 План стажування', planTables.internship, 'plan-internship');
+    } else {
+        renderDirectory(app);
+    }
+}
+
+function renderPlanTable(app, title, table, activePage) {
+    const headers = table?.headers || [];
+    const rows = table?.rows || [];
+    const nameColIdx = headers.findIndex(h => {
+        const nh = normalizeHeader(h);
+        return nh === normalizeHeader('П.І.П') || nh === 'піп' || nh === normalizeHeader('ПІП');
+    });
+    const idColIdx = headers.findIndex(h => normalizeHeader(h) === normalizeHeader('ID'));
+
+    const grouped = (() => {
+        if (nameColIdx < 0 && idColIdx < 0) return { groups: new Map(), order: [] };
+
+        const keyColIdx = idColIdx >= 0 ? idColIdx : nameColIdx;
+        const groups = new Map(); // startIndex -> size
+        const order = []; // start indices in order
+        let currentStart = null;
+        let currentKey = null;
+        let currentSize = 0;
+
+        const getKey = (i) => {
+            const raw = String(rows[i]?.[keyColIdx] ?? '').trim();
+            return raw;
+        };
+
+        for (let i = 0; i < rows.length; i++) {
+            const key = getKey(i);
+
+            if (key) {
+                if (currentStart === null || key !== currentKey) {
+                    if (currentStart !== null) {
+                        groups.set(currentStart, currentSize);
+                        order.push(currentStart);
+                    }
+                    currentStart = i;
+                    currentKey = key;
+                    currentSize = 1;
+                } else {
+                    currentSize++;
+                }
+            } else if (currentStart !== null) {
+                // якщо ключ порожній, але група вже почалась — продовжуємо
+                currentSize++;
+            }
+        }
+        if (currentStart !== null) {
+            groups.set(currentStart, currentSize);
+            order.push(currentStart);
+        }
+        return { groups, order };
+    })();
+
+    app.innerHTML = `
+        <div class="max-w-7xl mx-auto p-6 pb-24">
+            <button onclick="location.hash='directory'" class="mb-6 text-blue-600 hover:text-blue-800 font-medium">
+                ← Назад до карток
+            </button>
+            <h1 class="text-3xl font-bold mb-4">${escapeHtml(title)}</h1>
+            <div class="bg-white rounded-lg border border-gray-200 p-4 overflow-x-auto">
+                ${rows.length === 0 ? '<p class="text-gray-500 py-8 text-center">Немає даних</p>' : `
+                    <table class="w-full text-sm border-collapse min-w-[900px]">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                ${headers.map((h, colIdx) => {
+                                    const nh = normalizeHeader(h);
+                                    const base = 'border border-gray-300 px-3 py-2 text-center ';
+                                    const widthClass =
+                                        colIdx === nameColIdx
+                                            ? 'min-w-[260px] max-w-[320px]'
+                                            : (nh.includes("суб'єкт") ? 'min-w-[140px] max-w-[180px]' : '');
+                                    return `<th class="${base}${widthClass}">${escapeHtml(h)}</th>`;
+                                }).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map((r, i) => {
+                                const isGroupStart = nameColIdx >= 0 && grouped.groups.has(i);
+                                const groupSize = isGroupStart ? grouped.groups.get(i) : 0;
+                                const rowCells = headers.map((_, colIdx) => {
+                                    const value = String(r?.[colIdx] ?? '').trim();
+                                    // якщо в таблиці стоїть "—/–/-" як заглушка — залишаємо порожнім
+                                    const normalizedValue =
+                                        value === '—' || value === '–' || value === '-' ? '' : value;
+                                    // Порожні клітинки залишаємо порожніми
+                                    const cellText = escapeHtml(normalizedValue);
+
+                                    if (colIdx === nameColIdx && nameColIdx >= 0) {
+                                        if (isGroupStart) {
+                                            return `<td rowspan="${groupSize}" class="border border-gray-300 px-3 py-2 align-top font-medium text-center min-w-[260px] max-w-[320px]">${cellText}</td>`;
+                                        }
+                                        // якщо це продовження групи — клітинку ПІП не рендеримо (rowspan перекриє)
+                                        return '';
+                                    }
+
+                                    const nh = normalizeHeader(headers[colIdx] || '');
+                                    const widthClass =
+                                        colIdx === nameColIdx
+                                            ? 'min-w-[260px] max-w-[320px]'
+                                            : (nh.includes("суб'єкт") ? 'min-w-[140px] max-w-[180px]' : '');
+                                    return `<td class="border border-gray-300 px-3 py-2 text-center ${widthClass}">${cellText}</td>`;
+                                }).filter(Boolean).join('');
+
+                                return `
+                                <tr class="${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50">
+                                    ${rowCells}
+                                </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `}
+            </div>
+        </div>
+        ${renderBottomNav(activePage)}
+    `;
+}
+
+function renderDirectory(app) {
+    app.innerHTML = `
+        <div class="max-w-7xl mx-auto p-6 pb-24">
+            <div class="search-box bg-white p-4 mb-6 rounded-lg shadow">
+                <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                    <h1 class="text-3xl font-bold mb-4">📘 Педагогічний профіль Шепетівського ПЛ</h1>
+                    <a
+                        href="https://metodust020.blogspot.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="w-full sm:w-auto shrink-0 px-3 sm:px-4 py-2 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white border border-transparent text-sm sm:text-base text-center"
+                    >
+                        🏫 Віртуальний методичний кабінет
+                    </a>
+                </div>
+                <div class="mt-3 flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
+                    <div class="text-sm text-gray-600">
+                        🌐 Дані оновлюються з таблиць • 📚 Освіта • 📊 Аналітика
+                    </div>
+                </div>
+                <p class="text-gray-600 mb-4">Всього: ${allTeachers.length} осіб</p>
+                <input type="text" 
+                       id="search" 
+                       placeholder="🔍 Пошук за прізвищем..." 
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       onkeyup="filterTeachers(this.value)">
+            </div>
+            
+            <div id="teachers-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                ${allTeachers.map(t => `
+                    <div class="teacher-card bg-white rounded-lg p-5 hover:shadow-lg transition cursor-pointer border border-gray-200"
+                         onclick="location.hash='profile-${t.id}'">
+                        <div class="flex items-start gap-4">
+                            ${renderAvatar(t.name, t.photoUrl, 60)}
+                            <div class="flex-1">
+                                <h3 class="font-semibold text-gray-900">${escapeHtml(t.name)}</h3>
+                                <p class="text-sm text-gray-600">${escapeHtml(t.position)}</p>
+                                <p class="text-xs text-gray-500 mt-1">Дата народження: ${escapeHtml(t.birthDate || '—')}</p>
+                            </div>
+                        </div>
+                        <button class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-medium text-sm">
+                            ✨ Переглянути профіль
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+        ${renderBottomNav('directory')}
+    `;
+}
+
+function filterTeachers(query) {
+    const grid = document.getElementById('teachers-grid');
+    const cards = grid.querySelectorAll('.teacher-card');
+    
+    cards.forEach(card => {
+        const name = card.textContent.toLowerCase();
+        if (name.includes(query.toLowerCase())) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+function renderProfile(app, id) {
+    const teacher = allTeachers.find(t => t.id === id);
+    if (!teacher) {
+        app.innerHTML = '<div class="text-center p-8">Педагог не знайдено</div>';
+        return;
+    }
+    
+    const trajectoriesCount = allTrajectories.filter(t => t.id === id).length;
+    const certProgramsCount = allCertPrograms[2025].filter(c => c.id === id).length + allCertPrograms[2026].filter(c => c.id === id).length;
+    const profileFields = [
+        ['👤 П.І.П', teacher.name],
+        ['🎂 Дата народження', teacher.birthDate],
+        ['💼 Посада', teacher.position],
+        ['🧩 Суміщена посада', teacher.combinedPosition],
+        ['🎓 Навчальний заклад, рік закінчення', teacher.education],
+        ['📚 Освітньо-кваліфікаційний рівень', teacher.educationLevel],
+        ['🧠 Спеціальність за дипломом', teacher.specialty],
+        ['📜 Кваліфікація за дипломом', teacher.qualification],
+        ['🛠️ Робітничий розряд за професією/професіям', teacher.workerRank],
+        ['⏳ Стаж заг', teacher.totalExperience],
+        ['👩‍🏫 Стаж пед', teacher.pedagogicalExperience],
+        ['📍 Стаж на посаді', teacher.positionExperience],
+        ['🏷️ Квал. категорія; Тар. розряд за основною посадою', teacher.mainCategory],
+        ['🏷️ Квал. категорія; Тар. розряд за суміщеною посадою', teacher.combinedCategory],
+        ['⭐ Пед. звання', teacher.pedagogicalTitle]
+    ];
+    
+    app.innerHTML = `
+        <div class="max-w-4xl mx-auto p-6 pb-24">
+            <button onclick="location.hash='directory'" class="mb-6 text-blue-600 hover:text-blue-800 font-medium">
+                ← Назад до списку
+            </button>
+            
+            <div class="bg-white rounded-lg p-6 mb-6 border border-gray-200">
+                <div class="flex flex-col sm:flex-row items-start gap-6">
+                    ${renderAvatar(teacher.name, teacher.photoUrl, 96).replace('text-sm', 'text-2xl')}
+                    <div class="flex-1 flex flex-col">
+                        <div class="order-1 sm:order-3 mt-2 sm:mt-4 flex flex-col sm:flex-row gap-2 items-start justify-start">
+                            <button onclick="location.hash='trajectory-${id}'" 
+                                class="w-auto px-3 sm:px-4 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 font-medium text-sm sm:text-base whitespace-nowrap">
+                                🧭 Освітня траєкторія (${trajectoriesCount})
+                            </button>
+                            <button onclick="location.hash='cert-programs-${id}'" 
+                                class="w-auto px-3 sm:px-4 py-2 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 font-medium text-sm sm:text-base whitespace-nowrap">
+                                🎓 Сертифікаційні програми (${certProgramsCount})
+                            </button>
+                        </div>
+                        <h1 class="order-2 sm:order-1 text-3xl font-bold">${escapeHtml(teacher.name)}</h1>
+                        <p class="order-3 sm:order-2 text-lg text-gray-600 mt-1">${escapeHtml(teacher.position)}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg p-6 mb-6 border border-gray-200">
+                <h2 class="text-xl font-bold mb-4">Дані педагога</h2>
+                <div class="space-y-3">
+                    ${profileFields.map(([label, value]) => `
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 py-2 border-b border-gray-100 last:border-b-0">
+                            <div class="text-sm font-semibold text-gray-900">${escapeHtml(label)}</div>
+                            <div class="text-sm text-gray-900 md:col-span-2">${escapeHtml(value || '—')}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+        ${renderBottomNav('profile')}
+    `;
+}
+
+function renderTrajectory(app, id) {
+    const teacher = allTeachers.find(t => t.id === id);
+    if (!teacher) return;
+
+    const rows = allTrajectories.filter(t => t.id === id);
+    const toLink = (value) => {
+        if (!value) return '—';
+        const trimmed = value.trim();
+        if (!/^https?:\/\//i.test(trimmed)) return escapeHtml(trimmed);
+        return `<a href="${escapeHtml(trimmed)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">Відкрити</a>`;
+    };
+    const verticalFields = [
+        ['Посада', 'position'],
+        ['Дата останньої атестації', 'lastAttestationDate'],
+        ['Дата наступної атестації', 'nextAttestationDate'],
+        ['Дата проходження останніх КПК', 'lastCpkDate'],
+        ["Суб'єкт КПК", 'cpkSubject'],
+        ['Дата наступного проходження КПК', 'nextCpkDate'],
+        ['Дата проходження стажування', 'internshipDate'],
+        ['Професія/розряд', 'professionRank'],
+        ["Суб'єкт стажування", 'internshipSubject']
+    ];
+    
+    app.innerHTML = `
+        <div class="max-w-7xl mx-auto p-6 pb-24">
+            <button onclick="location.hash='profile-${id}'" class="mb-6 text-blue-600 hover:text-blue-800 font-medium">
+                ← До профіля
+            </button>
+            
+            <h1 class="text-3xl font-bold mb-6">🗺️ ${escapeHtml(teacher.name)}: Освітня траєкторія</h1>
+            ${rows.length === 0 ? '<div class="bg-white rounded-lg border border-gray-200 p-8"><p class="text-gray-500 text-center">Немає даних освітньої траєкторії</p></div>' : `
+                <div class="bg-white rounded-lg border border-gray-200 p-4 overflow-x-auto">
+                    <table class="w-full text-sm border-collapse min-w-[900px]">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="border border-gray-300 px-3 py-2 text-left">Параметр</th>
+                                ${rows.map((row, idx) => `
+                                    <th class="border border-gray-300 px-3 py-2 text-left">
+                                        ${escapeHtml(row.position || `Запис ${idx + 1}`)}
+                                    </th>
+                                `).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${verticalFields.map(([label, key], rowIdx) => `
+                                <tr class="${rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}">
+                                    <td class="border border-gray-300 px-3 py-2 font-medium">${escapeHtml(label)}</td>
+                                    ${rows.map(row => `<td class="border border-gray-300 px-3 py-2">${escapeHtml(row[key] || '—')}</td>`).join('')}
+                                </tr>
+                            `).join('')}
+                            <tr>
+                                <td class="border border-gray-300 px-3 py-2 font-medium bg-gray-50">Електронне портфоліо</td>
+                                <td class="border border-gray-300 px-3 py-2" colspan="${rows.length}">${toLink(rows[0]?.portfolioLink || '')}</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-gray-300 px-3 py-2 font-medium">Звіт 2025/2026</td>
+                                <td class="border border-gray-300 px-3 py-2" colspan="${rows.length}">${toLink(rows[0]?.report2526Link || '')}</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-gray-300 px-3 py-2 font-medium bg-gray-50">Звіт 2024/2025</td>
+                                <td class="border border-gray-300 px-3 py-2" colspan="${rows.length}">${toLink(rows[0]?.report2425Link || '')}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            `}
+        </div>
+        ${renderBottomNav('trajectory')}
+    `;
+}
+
+function parseHoursValue(hoursText) {
+    const normalized = String(hoursText || '').replace(',', '.').match(/\d+(\.\d+)?/);
+    return normalized ? parseFloat(normalized[0]) : 0;
+}
+
+function parseYearsValue(value) {
+    const num = parseFloat(String(value || '').replace(',', '.'));
+    return Number.isFinite(num) ? num : 0;
+}
+
+function toPercent(count, total) {
+    if (!total) return '0%';
+    return `${((count / total) * 100).toFixed(1)}%`;
+}
+
+function extractTariff(value) {
+    const text = String(value || '');
+    const match = text.match(/(\d+)\s*т\.?\s*р/i) || text.match(/(\d+)\s*розряд/i) || text.match(/\b(\d{1,2})\b/);
+    return match ? `${match[1]} т.р.` : null;
+}
+
+function extractCategoryCode(value) {
+    const text = String(value || '').trim();
+    if (!text) return null;
+    const normalized = text.replace(/\s+/g, '').toUpperCase();
+    if (normalized === 'В') return 'В';
+    if (normalized === 'І') return 'І';
+    if (normalized === 'ІІ') return 'ІІ';
+    if (normalized === 'С') return 'С';
+    return null;
+}
+
+function bucketPedExperience(years) {
+    const y = parseYearsValue(years);
+    if (y <= 3) return '1-3 роки';
+    if (y <= 10) return '3-10 років';
+    if (y <= 20) return '10-20 років';
+    return 'Понад 20 років';
+}
+
+function countBy(items, getter) {
+    const map = new Map();
+    for (const item of items) {
+        const key = getter(item) || 'Не вказано';
+        map.set(key, (map.get(key) || 0) + 1);
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function renderDistributionChart(title, entries, total) {
+    return `
+        <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <h3 class="text-lg font-semibold mb-3">${escapeHtml(title)}</h3>
+            <div class="space-y-3">
+                ${entries.map(([label, count]) => `
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="text-gray-700">${escapeHtml(label)}</span>
+                            <span class="font-medium">${count} (${toPercent(count, total)})</span>
+                        </div>
+                        <div class="h-2 bg-gray-100 rounded">
+                            <div class="h-2 bg-blue-600 rounded" style="width:${(count / Math.max(total, 1)) * 100}%"></div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function renderDonutLegendChart(title, entries, total) {
+    const colors = ['#2563eb', '#7c3aed', '#0891b2', '#16a34a', '#ea580c', '#dc2626'];
+    return `
+        <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <h3 class="text-lg font-semibold mb-3">${escapeHtml(title)}</h3>
+            <div class="space-y-2">
+                ${entries.map(([label, count], i) => `
+                    <div class="flex items-center justify-between text-sm">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-block w-3 h-3 rounded-full" style="background:${colors[i % colors.length]}"></span>
+                            <span>${escapeHtml(label)}</span>
+                        </div>
+                        <span class="font-medium">${count} (${toPercent(count, total)})</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function renderCompactTableChart(title, entries, total) {
+    return `
+        <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <h3 class="text-lg font-semibold mb-3">${escapeHtml(title)}</h3>
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left text-gray-600 border-b">
+                        <th class="py-2">Показник</th>
+                        <th class="py-2 text-right">К-сть</th>
+                        <th class="py-2 text-right">%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${entries.map(([label, count]) => `
+                        <tr class="border-b last:border-b-0">
+                            <td class="py-2">${escapeHtml(label)}</td>
+                            <td class="py-2 text-right">${count}</td>
+                            <td class="py-2 text-right">${toPercent(count, total)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderStatistics(app) {
+    const totalTeachers = allTeachers.length;
+    const combinedPositionCount = allTeachers.filter(t => String(t.combinedPosition || '').trim()).length;
+
+    const mainCategories = countBy(allTeachers, t => extractCategoryCode(t.mainCategory))
+        .filter(([label]) => ['В', 'І', 'ІІ', 'С'].includes(label));
+    const combinedCategories = countBy(
+        allTeachers.filter(t => String(t.combinedCategory || '').trim()),
+        t => extractCategoryCode(t.combinedCategory)
+    ).filter(([label]) => ['В', 'І', 'ІІ', 'С'].includes(label));
+    const mainTariffs = countBy(allTeachers, t => extractTariff(t.mainCategory))
+        .filter(([label]) => label && label !== 'Не вказано');
+    const pedagogicalTitles = countBy(allTeachers, t => {
+        const v = String(t.pedagogicalTitle || '').trim();
+        return v || null;
+    }).filter(([label]) => label && label !== 'Не вказано');
+    const pedExperienceBucketsRaw = countBy(allTeachers, t => bucketPedExperience(t.pedagogicalExperience));
+    const pedExperienceOrder = ['1-3 роки', '3-10 років', '10-20 років', 'Понад 20 років'];
+    const pedExperienceBuckets = pedExperienceOrder
+        .map(label => [label, pedExperienceBucketsRaw.find(([key]) => key === label)?.[1] || 0])
+        .filter(([, count]) => count > 0);
+
+    app.innerHTML = `
+        <div class="max-w-7xl mx-auto p-6 pb-24">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                <h1 class="text-3xl font-bold">📊 Статистика педагогічної діяльності</h1>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="bg-white rounded-lg border border-gray-200 p-5">
+                    <div class="text-sm text-gray-600">Загальна кількість педагогів</div>
+                    <div class="text-3xl font-bold text-blue-700 mt-2">${totalTeachers}</div>
+                </div>
+                <div class="bg-white rounded-lg border border-gray-200 p-5">
+                    <div class="text-sm text-gray-600">Педагоги за суміщеною посадою</div>
+                    <div class="text-3xl font-bold text-indigo-700 mt-2">${combinedPositionCount}</div>
+                    <div class="text-sm text-gray-500 mt-1">${toPercent(combinedPositionCount, totalTeachers)} від загальної кількості</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                ${renderDistributionChart('Категорії за основною посадою', mainCategories, totalTeachers)}
+                ${renderDonutLegendChart('Категорії за суміщеною посадою', combinedCategories, Math.max(combinedPositionCount, 1))}
+                ${renderCompactTableChart('Тарифні розряди за основною посадою', mainTariffs, totalTeachers)}
+                ${renderDonutLegendChart('Педагогічні звання', pedagogicalTitles, totalTeachers)}
+                ${renderDistributionChart('Стаж педагогічний', pedExperienceBuckets, totalTeachers)}
+            </div>
+        </div>
+        ${renderBottomNav('statistics')}
+    `;
+}
+
+function renderCertPrograms(app, id) {
+    const teacher = allTeachers.find(t => t.id === id);
+    if (!teacher) return;
+
+    const yearMatch = window.location.hash.match(/year=(2025|2026)/);
+    const selectedYear = yearMatch ? parseInt(yearMatch[1], 10) : 2026;
+    const rows = allCertPrograms[selectedYear].filter(c => c.id === id);
+    const totalHours = rows.reduce((sum, row) => sum + parseHoursValue(row.hours), 0);
+
+    app.innerHTML = `
+        <div class="max-w-7xl mx-auto p-6 pb-24">
+            <button onclick="location.hash='profile-${id}'" class="mb-6 text-blue-600 hover:text-blue-800 font-medium">
+                ← До профіля
+            </button>
+
+            <h1 class="text-3xl font-bold mb-6">📚 ${escapeHtml(teacher.name)}: Сертифікаційні програми</h1>
+
+            <div class="mb-4 flex gap-2">
+                <button
+                    onclick="location.hash='cert-programs-${id}?year=2026'"
+                    class="px-4 py-2 rounded font-medium ${selectedYear === 2026 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+                >
+                    2026 рік
+                </button>
+                <button
+                    onclick="location.hash='cert-programs-${id}?year=2025'"
+                    class="px-4 py-2 rounded font-medium ${selectedYear === 2025 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+                >
+                    2025 рік
+                </button>
+            </div>
+
+            <div class="bg-white rounded-lg border border-gray-200 p-4 overflow-x-auto">
+                ${rows.length === 0 ? '<p class="text-gray-500 py-8 text-center">Немає сертифікацій за обраний рік</p>' : `
+                    <table class="w-full text-sm border-collapse min-w-[1150px]">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="border border-gray-300 px-3 py-2 text-left">П.І.П</th>
+                                <th class="border border-gray-300 px-3 py-2 text-left">Суб'єкт КПК</th>
+                                <th class="border border-gray-300 px-3 py-2 text-left">Статус суб'єкта КПК</th>
+                                <th class="border border-gray-300 px-3 py-2 text-left">Форма навчання</th>
+                                <th class="border border-gray-300 px-3 py-2 text-left">Тема навчання</th>
+                                <th class="border border-gray-300 px-3 py-2 text-left">Сертифікат (серія, номер)</th>
+                                <th class="border border-gray-300 px-3 py-2 text-left">Дата видачі</th>
+                                <th class="border border-gray-300 px-3 py-2 text-center">Кількість годин</th>
+                                <th class="border border-gray-300 px-3 py-2 text-center">Кредити ЕКТС</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map((row, i) => `
+                                <tr class="${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50">
+                                    ${i === 0 ? `<td rowspan="${rows.length}" class="border border-gray-300 px-3 py-2 align-top font-medium">${escapeHtml(teacher.name || '—')}</td>` : ''}
+                                    <td class="border border-gray-300 px-3 py-2">${escapeHtml(row.cpkSubject || '—')}</td>
+                                    <td class="border border-gray-300 px-3 py-2">${escapeHtml(row.cpkStatus || '—')}</td>
+                                    <td class="border border-gray-300 px-3 py-2">${escapeHtml(row.form || '—')}</td>
+                                    <td class="border border-gray-300 px-3 py-2">${escapeHtml(row.topic || '—')}</td>
+                                    <td class="border border-gray-300 px-3 py-2">${escapeHtml(row.certificate || '—')}</td>
+                                    <td class="border border-gray-300 px-3 py-2">${escapeHtml(row.issueDate || '—')}</td>
+                                    <td class="border border-gray-300 px-3 py-2 text-center">${escapeHtml(row.hours || '—')}</td>
+                                    <td class="border border-gray-300 px-3 py-2 text-center">${escapeHtml(row.ects || '—')}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `}
+            </div>
+
+            <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div class="text-sm text-blue-700 font-medium">Сума годин за рік (${selectedYear}):</div>
+                <div class="text-2xl font-bold text-blue-900">${totalHours % 1 === 0 ? totalHours.toFixed(0) : totalHours.toFixed(1)}</div>
+            </div>
+        </div>
+        ${renderBottomNav('cert-programs')}
+    `;
+}
+
+function renderBottomNav(activePage) {
+    const isCardsActive = activePage === 'directory';
+    const isStatsActive = activePage === 'statistics';
+    const isPlanCpkActive = activePage === 'plan-cpk';
+    const isPlanInternshipActive = activePage === 'plan-internship';
+    const navBtn = 'bottom-nav-btn inline-flex items-center justify-center text-center leading-tight';
+    const navBtnWrap = 'bottom-nav-btn bottom-nav-btn--wrap bottom-nav-btn--fixed inline-flex items-center justify-center text-center leading-tight';
+    return `
+        <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-20">
+            <div class="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
+                <div class="flex sm:hidden justify-center">
+                    <button onclick="openMobileNav()" class="${navBtn} px-6 py-2 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white">
+                        ☰ Меню
+                    </button>
+                </div>
+
+                <div class="hidden sm:flex items-stretch justify-center gap-2 flex-wrap">
+                    <button
+                        onclick="location.hash='directory'"
+                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition ${
+                            isCardsActive
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }"
+                    >
+                        🗂️ Картки
+                    </button>
+                    <a
+                        href="https://xtiles.app/6637a473f4f47860e60402da"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="${navBtnWrap} px-4 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    >
+                        🔬 Науково-методична діяльність педагогів
+                    </a>
+                    <a
+                        href="https://datastudio.google.com/reporting/c0c5592b-4023-4707-a20d-15530ca67ad3"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="${navBtnWrap} px-4 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    >
+                        📈 Показники педагогічної діяльності
+                    </a>
+                    <button
+                        onclick="location.hash='plan-cpk'"
+                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition ${
+                            isPlanCpkActive
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }"
+                    >
+                        🗓️ План КПК
+                    </button>
+                    <button
+                        onclick="location.hash='plan-internship'"
+                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition ${
+                            isPlanInternshipActive
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }"
+                    >
+                        🧰 План стажування
+                    </button>
+                    <button
+                        onclick="location.hash='statistics'"
+                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition ${
+                            isStatsActive
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }"
+                    >
+                        📊 Статистика
+                    </button>
+                </div>
+            </div>
+        </nav>
+        <div id="mobile-nav" class="hidden fixed inset-0 z-30">
+            <div class="absolute inset-0 bg-black/40" onclick="closeMobileNav()"></div>
+            <div class="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl border-t border-gray-200 p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="font-semibold text-gray-800">Меню</div>
+                    <button class="px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200" onclick="closeMobileNav()">✕</button>
+                </div>
+                <div class="grid grid-cols-1 gap-2">
+                    <button onclick="closeMobileNav();location.hash='directory'" class="w-full ${navBtn} px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">🗂️ Картки</button>
+                    <a href="https://xtiles.app/6637a473f4f47860e60402da" target="_blank" rel="noopener noreferrer" class="w-full ${navBtn} px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">🔬 Науково-методична діяльність педагогів</a>
+                    <a href="https://datastudio.google.com/reporting/c0c5592b-4023-4707-a20d-15530ca67ad3" target="_blank" rel="noopener noreferrer" class="w-full ${navBtn} px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">📈 Показники педагогічної діяльності</a>
+                    <button onclick="closeMobileNav();location.hash='plan-cpk'" class="w-full ${navBtn} px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">🗓️ План КПК</button>
+                    <button onclick="closeMobileNav();location.hash='plan-internship'" class="w-full ${navBtn} px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">🧰 План стажування</button>
+                    <button onclick="closeMobileNav();location.hash='statistics'" class="w-full ${navBtn} px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">📊 Статистика</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ============= СТАРТ =============
+async function main() {
+    const app = document.getElementById('app');
+    app.innerHTML = '<div class="flex items-center justify-center h-screen"><div class="text-center"><div class="shimmer w-16 h-16 rounded-full mb-4 mx-auto"></div><p>Завантаження даних...</p></div></div>';
+    
+    const loaded = await loadData();
+    
+    if (loaded) {
+        renderApp();
+        window.addEventListener('hashchange', renderApp);
+        startFileMonitoring();
+    } else {
+        const details = escapeHtml(window.__lastLoadError?.message || '');
+        app.innerHTML = `
+            <div class="max-w-3xl mx-auto p-8">
+                <div class="bg-white rounded-lg border border-red-200 p-6">
+                    <div class="text-red-700 font-semibold text-lg">Помилка завантаження даних</div>
+                    <div class="text-gray-700 mt-2">Перевірте доступ до Google Sheets (публічний перегляд за посиланням) або мережу.</div>
+                    ${details ? `<div class="mt-3 text-xs text-gray-500 break-words">${details}</div>` : ''}
+                    <div class="mt-5 flex flex-wrap gap-2 justify-center">
+                        <button onclick="location.reload()" class="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium">
+                            🔄 Спробувати ще раз
+                        </button>
+                        <button onclick="location.hash='directory'; location.reload()" class="px-5 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium">
+                            🗂️ На головну
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+}
+
+main();
+</script>
+
+</body>
+</html>
