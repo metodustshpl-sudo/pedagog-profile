@@ -38,12 +38,14 @@
 
         /* ===== Responsive tweaks (mobile/desktop) ===== */
         .app-wrap { max-width: 80rem; margin: 0 auto; }
+        /* Нижня навігація */
         .bottom-nav-btn { white-space: nowrap; }
+        .bottom-nav-btn--wrap { white-space: normal; }
+        .bottom-nav-btn--fixed { width: 260px; max-width: 260px; }
 
         @media (max-width: 640px) {
             .search-box { padding: 0.875rem !important; }
             .teacher-card { padding: 0.875rem !important; }
-            .bottom-nav-items { justify-content: flex-start !important; }
         }
     </style>
 </head>
@@ -1270,13 +1272,13 @@ function renderDirectory(app) {
     app.innerHTML = `
         <div class="max-w-7xl mx-auto p-6 pb-24">
             <div class="search-box bg-white p-4 mb-6 rounded-lg shadow">
-                <div class="flex items-start justify-between gap-4">
+                <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <h1 class="text-3xl font-bold mb-4">📘 Педагогічний профіль Шепетівського ПЛ</h1>
                     <a
                         href="https://metodust020.blogspot.com/"
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="shrink-0 px-4 py-2 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white border border-transparent"
+                        class="w-full sm:w-auto shrink-0 px-3 sm:px-4 py-2 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white border border-transparent text-sm sm:text-base text-center"
                     >
                         🏫 Віртуальний методичний кабінет
                     </a>
@@ -1721,6 +1723,7 @@ function renderBottomNav(activePage) {
     const isPlanCpkActive = activePage === 'plan-cpk';
     const isPlanInternshipActive = activePage === 'plan-internship';
     const navBtn = 'bottom-nav-btn inline-flex items-center justify-center text-center leading-tight';
+    const navBtnWrap = 'bottom-nav-btn bottom-nav-btn--wrap bottom-nav-btn--fixed inline-flex items-center justify-center text-center leading-tight';
     return `
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-20">
             <div class="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
@@ -1730,7 +1733,7 @@ function renderBottomNav(activePage) {
                     </button>
                 </div>
 
-                <div class="hidden sm:flex items-center justify-center gap-3 flex-wrap">
+                <div class="hidden sm:flex items-stretch justify-center gap-2 flex-wrap">
                     <button
                         onclick="location.hash='directory'"
                         class="${navBtn} px-6 py-2 rounded-lg font-medium transition ${
@@ -1745,7 +1748,7 @@ function renderBottomNav(activePage) {
                         href="https://xtiles.app/6637a473f4f47860e60402da"
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200 max-w-[240px]"
+                        class="${navBtnWrap} px-4 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200"
                     >
                         🔬 Науково-методична діяльність педагогів
                     </a>
@@ -1753,7 +1756,7 @@ function renderBottomNav(activePage) {
                         href="https://datastudio.google.com/reporting/c0c5592b-4023-4707-a20d-15530ca67ad3"
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200 max-w-[240px]"
+                        class="${navBtnWrap} px-4 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200"
                     >
                         📈 Показники педагогічної діяльності
                     </a>
