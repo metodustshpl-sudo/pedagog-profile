@@ -35,6 +35,20 @@
             border: 1px solid rgba(149, 163, 179, 0.35);
             box-shadow: 0 8px 24px rgba(52, 77, 102, 0.12);
         }
+
+        /* ===== Responsive tweaks (mobile/desktop) ===== */
+        .app-wrap { max-width: 80rem; margin: 0 auto; }
+        .bottom-nav-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .bottom-nav-scroll::-webkit-scrollbar { height: 6px; }
+        .bottom-nav-scroll::-webkit-scrollbar-thumb { background: rgba(17, 24, 39, 0.18); border-radius: 999px; }
+        .bottom-nav-items { gap: 0.5rem; }
+        .bottom-nav-btn { white-space: nowrap; }
+
+        @media (max-width: 640px) {
+            .search-box { padding: 0.875rem !important; }
+            .teacher-card { padding: 0.875rem !important; }
+            .bottom-nav-items { justify-content: flex-start !important; }
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -1700,11 +1714,11 @@ function renderBottomNav(activePage) {
     const isStatsActive = activePage === 'statistics';
     const isPlanCpkActive = activePage === 'plan-cpk';
     const isPlanInternshipActive = activePage === 'plan-internship';
-    const navBtn = 'inline-flex items-center justify-center text-center leading-tight';
+    const navBtn = 'bottom-nav-btn inline-flex items-center justify-center text-center leading-tight';
     return `
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-20">
-            <div class="max-w-7xl mx-auto px-4 py-3">
-                <div class="flex items-center justify-center gap-3 flex-wrap">
+            <div class="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3 bottom-nav-scroll">
+                <div class="flex items-center bottom-nav-items">
                     <button
                         onclick="location.hash='directory'"
                         class="${navBtn} px-6 py-2 rounded-lg font-medium transition ${
