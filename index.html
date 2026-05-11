@@ -38,10 +38,6 @@
 
         /* ===== Responsive tweaks (mobile/desktop) ===== */
         .app-wrap { max-width: 80rem; margin: 0 auto; }
-        .bottom-nav-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        .bottom-nav-scroll::-webkit-scrollbar { height: 6px; }
-        .bottom-nav-scroll::-webkit-scrollbar-thumb { background: rgba(17, 24, 39, 0.18); border-radius: 999px; }
-        .bottom-nav-items { gap: 0.5rem; }
         .bottom-nav-btn { white-space: nowrap; }
 
         @media (max-width: 640px) {
@@ -219,6 +215,16 @@ async function fetchWithTimeout(url, timeoutMs) {
     } finally {
         clearTimeout(timeoutId);
     }
+}
+
+function openMobileNav() {
+    const el = document.getElementById('mobile-nav');
+    if (el) el.classList.remove('hidden');
+}
+
+function closeMobileNav() {
+    const el = document.getElementById('mobile-nav');
+    if (el) el.classList.add('hidden');
 }
 
 async function fetchTextWithRetry(url, options = {}) {
@@ -1717,8 +1723,14 @@ function renderBottomNav(activePage) {
     const navBtn = 'bottom-nav-btn inline-flex items-center justify-center text-center leading-tight';
     return `
         <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-20">
-            <div class="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3 bottom-nav-scroll">
-                <div class="flex items-center bottom-nav-items">
+            <div class="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
+                <div class="flex sm:hidden justify-center">
+                    <button onclick="openMobileNav()" class="${navBtn} px-6 py-2 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white">
+                        ☰ Меню
+                    </button>
+                </div>
+
+                <div class="hidden sm:flex items-center justify-center gap-3 flex-wrap">
                     <button
                         onclick="location.hash='directory'"
                         class="${navBtn} px-6 py-2 rounded-lg font-medium transition ${
@@ -1733,7 +1745,7 @@ function renderBottomNav(activePage) {
                         href="https://xtiles.app/6637a473f4f47860e60402da"
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200 max-w-[220px]"
+                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200 max-w-[240px]"
                     >
                         🔬 Науково-методична діяльність педагогів
                     </a>
@@ -1741,7 +1753,7 @@ function renderBottomNav(activePage) {
                         href="https://datastudio.google.com/reporting/c0c5592b-4023-4707-a20d-15530ca67ad3"
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200 max-w-[220px]"
+                        class="${navBtn} px-6 py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200 max-w-[240px]"
                     >
                         📈 Показники педагогічної діяльності
                     </a>
@@ -1778,6 +1790,23 @@ function renderBottomNav(activePage) {
                 </div>
             </div>
         </nav>
+        <div id="mobile-nav" class="hidden fixed inset-0 z-30">
+            <div class="absolute inset-0 bg-black/40" onclick="closeMobileNav()"></div>
+            <div class="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl border-t border-gray-200 p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="font-semibold text-gray-800">Меню</div>
+                    <button class="px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200" onclick="closeMobileNav()">✕</button>
+                </div>
+                <div class="grid grid-cols-1 gap-2">
+                    <button onclick="closeMobileNav();location.hash='directory'" class="w-full ${navBtn} px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">🗂️ Картки</button>
+                    <a href="https://xtiles.app/6637a473f4f47860e60402da" target="_blank" rel="noopener noreferrer" class="w-full ${navBtn} px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">🔬 Науково-методична діяльність педагогів</a>
+                    <a href="https://datastudio.google.com/reporting/c0c5592b-4023-4707-a20d-15530ca67ad3" target="_blank" rel="noopener noreferrer" class="w-full ${navBtn} px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">📈 Показники педагогічної діяльності</a>
+                    <button onclick="closeMobileNav();location.hash='plan-cpk'" class="w-full ${navBtn} px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">🗓️ План КПК</button>
+                    <button onclick="closeMobileNav();location.hash='plan-internship'" class="w-full ${navBtn} px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">🧰 План стажування</button>
+                    <button onclick="closeMobileNav();location.hash='statistics'" class="w-full ${navBtn} px-4 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">📊 Статистика</button>
+                </div>
+            </div>
+        </div>
     `;
 }
 
