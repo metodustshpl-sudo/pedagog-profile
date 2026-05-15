@@ -858,7 +858,8 @@ function mapTrajectoryFromValues(values, idx) {
         internshipSubject: String(values[idx.internshipSubject] || '').trim(),
         portfolioLink: String(values[idx.portfolioLink] || '').trim(),
         report2526Link: String(values[idx.report2526Link] || '').trim(),
-        report2425Link: String(values[idx.report2425Link] || '').trim()
+        report2425Link: String(values[idx.report2425Link] || '').trim(),
+        problem: String(values[idx.problem] || '').trim()
     };
 }
 
@@ -876,7 +877,8 @@ function buildTrajectoryIndex(headers) {
         internshipSubject: findHeaderIndex(headers, ["Суб'єкт стажування"]),
         portfolioLink: findHeaderIndex(headers, ['Покликання на електронне портфоліо педагога']),
         report2526Link: findHeaderIndex(headers, ['Покликання на звіт педагога 2025/2026н.р.']),
-        report2425Link: findHeaderIndex(headers, ['Покликання на звіт педагога 2024/2025н.р.'])
+        report2425Link: findHeaderIndex(headers, ['Покликання на звіт педагога 2024/2025н.р.']),
+        problem: findHeaderIndex(headers, ['Індивідуальна методична тема/проблема']),
     };
 }
 
